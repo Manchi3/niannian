@@ -1,0 +1,48 @@
+# Fly.io 配置 — 念念（Particle Diary）
+#
+# 为什么 Fly.io 比 Render 更适合长期跑：
+#   免费额度里包含 3GB 持久卷，账号数据（users.json）不会像 Render 免费层
+#   那样在重启后丢失。
+#
+# 首次部署：
+#   fly auth login
+#   fly apps create particle-diary          # 名字需全局唯一，被占用就换一个
+#   fly volumes create niannian_data --region sin --size 1
+#   fly secrets set DEEPSEEK_API_KEY=sk-xxx MIMO_API_KEY=xxx
+#   fly deploy
+#
+# 之后更新：fly deploy
+
+app = "particle-diary"
+primary_region = "sin"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  NODE_ENV = "production"
+  PORT = "3001"
+  # 持久化关键：store.ts 读取此变量，把数据写到挂载的卷而非容器文件系统
+  PARTICLE_DIARY_DATA_DIR = "/app/data"
+  DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
+  DEEPSEEK_MODEL = "deepseek-chat"
+  MIMO_BASE_URL = "https://api.xiaomimimo.com/v1"
+  MIMO_MODEL = "mimo-v2.5"
+
+[http_service]
+  internal_port = 3001
+  force_https = true
+  # 无请求时挂起省额度，有请求自动唤醒（冷启动约 2-5 秒）
+  auto_stop_machines = "suspend"
+  auto_start_machines = true
+  min_machines_running = 0
+
+# 持久卷：对应 Dockerfile 里的 /app/data
+[[mounts]]
+  source = "niannian_data"
+  destination = "/app/data"
+
+[[vm]]
+  memory = "512mb"
+  cpu_kind = "shared"
+  cpus = 1

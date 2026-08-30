@@ -1,0 +1,110 @@
+```mermaid
+sequenceDiagram
+    actor U as 用户
+    participant M as AuthModal
+    participant S as authStore
+    participant A as api.ts
+    participant R as 服务端 auth 路由
+    participant K as codeStore(内存)
+    participant J as JsonStore(users.json)
+
+    U->>M: 输入 contact，点「获取验证码」
+    M->>S: sendCode(contact)
+    S->>A: sendCode(contact)
+    A->>R: POST /api/auth/code {contact}
+    R->>K: issueCode(contact)（60s 冷却校验）
+    K-->>R: {code, expiresAt(5min)}
+    R-->>A: {ok, devCode}(开发模式回显)
+    A-->>S: devCode
+    S->>M: toast「验证码：xxxxxx」+ 60s 倒计时
+    U->>M: 输入验证码(+昵称/密码)，点「开启账户」
+    M->>S: register({contact,code,nickname,password})
+    S->>A: register(...)
+    A->>R: POST /api/auth/register
+    R->>K: verifyCode(contact,code)（校验即消费）
+    R->>J: 查重 contact（存在→409）
+    R->>J: 新建用户 {id,contact,nickname,passHash,salt,...}
+    J-->>R: 原子写 users.json
+    R->>R: issueToken(uid)
+    R-->>A: {token, user}
+    A-->>S: {token, user}
+    S->>S: 写 localStorage.nn_token；set({token,user,status:'authed'})
+    S->>S: window.location.reload()
+    Note over S: 刷新后 App 启动 → restoreSession() → GET /me 恢复
+```
+
+```mermaid
+sequenceDiagram
+    participant App as App.tsx(useEffect)
+    participant S as authStore
+    participant A as api.ts
+    participant R as GET /api/auth/me
+
+    App->>S: restoreSession()
+    alt 无 nn_token
+        S->>S: status='guest'
+    else 有 nn_token
+        S->>A: fetchMe()（Bearer token）
+        A->>R: GET /api/auth/me
+        alt 200
+            R-->>A: {user}
+            A-->>S: user
+            S->>S: set({user,status:'authed'})
+            S->>S: reloadLocalPrefs() + reloadConfig()（按 uid 重读本地偏好）
+            S->>S: diaryStore.loadDiaries()（新 uid 下重拉）
+        else 401（token 无效）
+            R-->>A: 401
+            S->>S: 清 nn_token；status='guest'（静默）
+        end
+    end
+```
+
+```mermaid
+sequenceDiagram
+    participant U as 用户
+    participant MM as MemoryModal
+    participant S as authStore
+    participant A as api.ts
+    participant R as POST /api/memories
+    participant J as JsonStore({uid}/memories.json)
+
+    U->>MM: 输入「告诉小念一件关于你的事...」，点金色 ↑
+    MM->>S: addMemory(text)
+    S->>A: addMemory(text)
+    A->>R: POST /api/memories {text}（Bearer）
+    R->>J: readMemories(uid) → push {id,text,source:'你亲手写下的',createdAt}
+    J-->>R: 原子写
+    R-->>A: 201 {memory}
+    A-->>S: memory
+    S->>S: memories 头部插入（计数「共 N 件」实时+1）
+    S-->>MM: 列表渲染新条目
+```
+
+```mermaid
+sequenceDiagram
+    participant U as 用户
+    participant MM as MemoryModal
+    participant H as MemoryItem(长按胶囊)
+    participant S as authStore
+    participant A as api.ts
+    participant R as DELETE /api/memories/:id
+    participant J as JsonStore({uid}/memories.json)
+
+    U->>MM: 点击某条 → 展开删除子面板（正文/meta 模糊淡化）
+    U->>H: pointerdown「按住 让它忘掉」
+    loop rAF 约 1200ms
+        H->>H: 进度 0→1 从左往右暗红填充
+    end
+    alt 中途松开
+        H->>H: 进度回退取消（不删除）
+    else 进度填满
+        H->>S: deleteMemory(id)
+        S->>A: deleteMemory(id)
+        A->>R: DELETE /api/memories/:id（Bearer）
+        R->>J: readMemories → filter → 原子写
+        R-->>A: {ok:true}
+        A-->>S: ok
+        S->>S: memories 移除该条（计数实时-1）
+        S-->>MM: 条目淡出收起
+    end
+```

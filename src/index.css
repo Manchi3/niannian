@@ -1,0 +1,516 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ====================================
+ * Global Styles — Particle Diary
+ * ==================================== */
+
+:root {
+  /* Deep warm background gradient */
+  --bg-gradient-start: #1b140f;
+  --bg-gradient-end: #080605;
+  /* Gold accent */
+  --gold-accent: rgba(212, 168, 83, 1);
+  --gold-soft: rgba(212, 168, 83, 0.07);
+  /* Light warm white */
+  --warm-white: #e8ddd0;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow-x: hidden;
+  background: radial-gradient(
+    ellipse at center,
+    var(--bg-gradient-start) 0%,
+    var(--bg-gradient-end) 100%
+  );
+  color: var(--warm-white);
+  font-family: 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  width: 100%;
+  min-height: 100vh;
+}
+
+/* Radial gradient utility */
+.bg-gradient-radial {
+  background: radial-gradient(
+    ellipse at center,
+    var(--bg-gradient-start) 0%,
+    var(--bg-gradient-end) 100%
+  );
+}
+
+/* Glass panel utility */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* ====================================
+ * Global: hide scrollbars, keep scrolling (Round 28 ③)
+ * The visual scrollbar is removed on every engine — WebKit, Firefox and
+ * legacy IE/Edge — while wheel / touch / keyboard scrolling stays fully
+ * functional (overflow rules on the containers are untouched).
+ * ==================================== */
+
+/* WebKit (Chrome / Safari / Edge / new Opera) */
+*::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+/* Firefox */
+* {
+  scrollbar-width: none;
+  scrollbar-color: transparent transparent;
+}
+
+/* IE / old Edge */
+* {
+  -ms-overflow-style: none;
+}
+
+/* Selection color */
+::selection {
+  background: rgba(212, 168, 83, 0.3);
+  color: #fff;
+}
+
+/* Remove default button/input styles */
+button {
+  cursor: pointer;
+  font-family: inherit;
+  border: none;
+  outline: none;
+}
+
+input,
+textarea {
+  font-family: inherit;
+  outline: none;
+}
+
+textarea {
+  resize: none;
+}
+
+/* ====================================
+ * Diary Content Styles
+ * ==================================== */
+
+.diary-content {
+  font-family: 'Noto Serif SC', serif;
+  line-height: 2;
+  letter-spacing: 0.02em;
+  text-align: justify;
+  word-break: break-word;
+}
+
+/* ====================================
+ * Animation Utilities
+ * ==================================== */
+
+/* Typewriter cursor for streaming messages */
+@keyframes blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+.typing-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 2px;
+  background: rgba(212, 168, 83, 1);
+  animation: blink 0.8s step-end infinite;
+  vertical-align: middle;
+}
+
+/* ====================================
+ * Line Clamp Utility (for diary list)
+ * ==================================== */
+
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ====================================
+ * Disable text selection on UI chrome
+ * ==================================== */
+
+button,
+[role='button'] {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* ====================================
+ * Smooth transitions on phase changes
+ * ==================================== */
+
+.phase-transition {
+  transition: opacity 700ms ease-out, transform 700ms ease-out;
+}
+
+/* ====================================
+ * Particle layer container effects (Round 22)
+ *
+ * IMPORTANT: all dim / breathe / sway effects are applied to the OUTER
+ * container that wraps ParticleCanvas — the particle engine files are
+ * never touched. The wrapper itself is position:fixed + inset:0 so the
+ * sway transform only nudges a full-viewport layer (it never collapses
+ * the fixed canvas inside).
+ * ==================================== */
+
+.particle-layer {
+  opacity: 1;
+  transition: opacity 500ms ease;
+}
+
+/* Diary tab: dim the particle image to a faint backdrop (①) */
+.particle-layer.particle-dim {
+  opacity: 0.45;
+}
+
+/* Condensing (Round 46 ②): pulse the PICTURE's BRIGHTNESS — bright↔dim, far
+   stronger & faster than before. Was a faint opacity breath (0.3↔0.45 over
+   2.5s); now brightness(1.5)↔brightness(0.55) over ~1.0s easeInOutSine, so the
+   image visibly "charges" roughly once per second. opacity is held at a
+   readable 0.6 so the centered copy stays legible even at the bright peak.
+   This class is mounted ONLY while isCondensing is true (see ChatMainView),
+   and is dropped the instant condensing ends — filter reverts to none with NO
+   residual flicker. Sway kept for life. */
+.particle-layer.particle-condensing {
+  opacity: 0.6;
+  animation:
+    particle-breathe 1s cubic-bezier(0.37, 0, 0.63, 1) infinite,
+    particle-sway 5.5s ease-in-out infinite;
+}
+
+@keyframes particle-breathe {
+  0%,
+  100% {
+    filter: brightness(0.55);
+  }
+  50% {
+    filter: brightness(1.5);
+  }
+}
+
+@keyframes particle-sway {
+  0%,
+  100% {
+    transform: translate(0px, 0px) rotate(0deg);
+  }
+  25% {
+    transform: translate(-4px, 2px) rotate(-0.4deg);
+  }
+  50% {
+    transform: translate(3px, -2px) rotate(0.3deg);
+  }
+  75% {
+    transform: translate(5px, 1px) rotate(-0.2deg);
+  }
+}
+
+/* ====================================
+ * Diary page readability (①)
+ * ==================================== */
+
+/* Gradient serif title — filter drop-shadow (NOT text-shadow, which would
+   show through the transparent fill and look broken). */
+.diary-title-gradient {
+  font-family: 'Noto Serif SC', 'Songti SC', serif;
+  font-size: 44px;
+  font-weight: 500;
+  letter-spacing: 0.15em;
+  line-height: 1.35;
+  text-align: center;
+  background: linear-gradient(180deg, #ffffff 15%, #f0e8d8 55%, #c9b285 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  filter: drop-shadow(0 3px 10px rgba(0, 0, 0, 0.85));
+}
+
+/* Centered date line: 13px #d8cdb8, 0.3em spacing, 60px gradient dashes */
+.diary-date-text {
+  font-size: 13px;
+  color: #d8cdb8;
+  letter-spacing: 0.3em;
+  white-space: nowrap;
+}
+
+.diary-date-line {
+  display: block;
+  width: 60px;
+  height: 1px;
+  background: linear-gradient(to right, rgba(255, 255, 255, 0.3), transparent);
+  flex: 0 0 auto;
+}
+
+.diary-date-line-right {
+  background: linear-gradient(to left, rgba(255, 255, 255, 0.3), transparent);
+}
+
+/* Body: 20px (Round 29 ④, +2px), 2.1 line-height, warm off-white, heavy
+   shadow for readability. Title (44px) and date (13px) lines untouched. */
+.diary-body-paragraph {
+  font-family: 'Noto Serif SC', 'Songti SC', serif;
+  font-size: 20px;
+  line-height: 2.1;
+  color: #f2ede3;
+  letter-spacing: 0.02em;
+  text-align: justify;
+  word-break: break-word;
+  text-shadow:
+    0 2px 10px rgba(0, 0, 0, 0.9),
+    0 0 2px rgba(0, 0, 0, 0.5);
+  margin-bottom: 28px;
+}
+
+.diary-body-paragraph:last-child {
+  margin-bottom: 0;
+}
+
+/* ====================================
+ * Chat bubbles & typewriter (⑦)
+ * ==================================== */
+
+/* AI reply — NO bubble. Text sits on a large, ink-wash dark bleed (::before)
+   that fades like ink on wet paper: center deep, edges dissolve, no hard
+   border, no small bubble. The element is sized to the text so the wash
+   hugs it; the text floats above via position/z-index. */
+.ai-reply-text {
+  position: relative;
+  display: inline-block;
+  font-family: 'ZCOOL XiaoWei', 'Ma Shan Zheng', 'Noto Serif SC', serif;
+  font-size: 18px;
+  line-height: 1.8;
+  color: #f5f0e6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.9), 0 1px 3px rgba(0, 0, 0, 0.85);
+  z-index: 1;
+}
+
+/* Ink-wash bleed behind the AI text — soft, large, feathered, blurry.
+   Extends well beyond the text box (inset negative) so the text rests in a
+   calm shadow; filter: blur dissolves any edge into a水墨晕开 feel. */
+.ai-reply-text::before {
+  content: '';
+  position: absolute;
+  inset: -20px -40px;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(0, 0, 0, 0.55) 0%,
+    rgba(0, 0, 0, 0.35) 30%,
+    rgba(0, 0, 0, 0.15) 60%,
+    transparent 100%
+  );
+  filter: blur(10px);
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* User message — SINGLE clean gray semi-transparent rounded bubble.
+   No nested dark pad, no double layer; just one airy capsule. */
+.user-bubble {
+  font-family: 'ZCOOL XiaoWei', 'Ma Shan Zheng', 'Noto Serif SC', serif;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 20px;
+  padding: 10px 18px;
+  font-size: 17px;
+  line-height: 1.7;
+  color: #f5f0e6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+}
+
+/* ====================================
+ * Thinking-state: stardust dots + condense orbit (⑥)
+ * ==================================== */
+
+/* 4 floating dots (2 white / 2 gold) drifting inside a 70×28px zone */
+.think-dots {
+  position: relative;
+  width: 70px;
+  height: 28px;
+  flex: 0 0 auto;
+}
+
+.think-dot {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  border-radius: 9999px;
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.45);
+  animation: think-float 2.4s ease-in-out infinite;
+}
+
+@keyframes think-float {
+  0% {
+    transform: translate(0px, 0px);
+    opacity: 0.25;
+  }
+  20% {
+    transform: translate(14px, -10px);
+    opacity: 1;
+  }
+  40% {
+    transform: translate(30px, 4px);
+    opacity: 0.7;
+  }
+  60% {
+    transform: translate(46px, -6px);
+    opacity: 1;
+  }
+  80% {
+    transform: translate(62px, 8px);
+    opacity: 0.45;
+  }
+  100% {
+    transform: translate(0px, 0px);
+    opacity: 0.25;
+  }
+}
+
+/* Condense button — capsule, translucent white (⑦) */
+.condense-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 28px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  color: #fff;
+  font-size: 15px;
+  letter-spacing: 0.2em;
+  cursor: pointer;
+  transition: background 200ms ease, opacity 300ms ease;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.condense-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.condense-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.condense-star {
+  color: #fff;
+  font-size: 14px;
+  line-height: 1;
+}
+
+/* Condense button rework — hollow particle ring (replaces .condense-orbit).
+   The ring is absolutely positioned over the (invisible) button so its size
+   and position match the capsule exactly; particles are pointer-transparent. */
+.condense-btn-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.condense-ring {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.condense-ring-inner {
+  position: absolute;
+  inset: 0;
+}
+
+.condense-ring-dot {
+  position: absolute;
+  left: 0;
+  top: 0;
+  border-radius: 9999px;
+  will-change: transform, opacity;
+  pointer-events: none;
+}
+
+/* ====================================
+ * Chat send button (Round 28 ②A)
+ * Transparent circle + thin border, an up-arrow (SVG, currentColor) inside.
+ * Default: faint white outline. Hover: soft translucent-white fill that
+ * brightens the ring + arrow. Empty-input (disabled) dims to 0.3.
+ * ==================================== */
+
+.chat-send-btn {
+  background: transparent;
+  border: 1.5px solid rgba(255, 255, 255, 0.4);
+  border-radius: 50%;
+  color: rgba(255, 255, 255, 0.5);
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease,
+    opacity 0.2s ease,
+    transform 0.2s ease;
+}
+
+.chat-send-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.7);
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.chat-send-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* ====================================
+ * Image-chat ambient glow (Round 28 ④)
+ * The uploaded photo's dominant color blooms as a soft elliptical radial
+ * gradient from screen-center — the picture "glowing faintly in the dark".
+ * Placed at z-0 (painted BEFORE the particle layer, also z-0) so the
+ * stardust stays on top. Fades in on mount; cross-tints over 1.5s when the
+ * image (and thus its color) changes. Only rendered in image-chat mode.
+ * ==================================== */
+
+.image-glow {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  transition: background 1.5s ease;
+  animation: imageGlowIn 1.5s ease;
+}
+
+@keyframes imageGlowIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}

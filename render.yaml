@@ -1,0 +1,53 @@
+# Render Blueprint — 念念（Particle Diary）
+#
+# 用法：Render Dashboard → New → Blueprint → 连上这个仓库
+#       Render 会自动读取本文件创建服务，然后你只需手动填两个 API Key。
+#
+# 说明：
+#   - 免费层（plan: free）磁盘是临时的：休眠唤醒或重新部署后 server/data/
+#     里的账号数据会被清空。演示/内测够用；若要长期留存账号，见 DEPLOY.md
+#     「数据持久化」一节升级到 Starter 计划并挂载持久盘。
+#   - region 选 singapore：对国内访问延迟低于美国节点。
+
+services:
+  - type: web
+    name: particle-diary
+    runtime: node
+    plan: free
+    region: singapore
+    branch: main
+
+    # 构建：装依赖 → 编译前端。
+    # NODE_OPTIONS 限制构建期内存，避免 three.js 打包时超出免费层 512MB 被 OOM 杀掉。
+    buildCommand: NODE_OPTIONS=--max-old-space-size=460 npm ci && npm run build
+
+    # 启动：Express 同时托管 dist/ 静态文件，一个端口跑全站
+    startCommand: npm start
+
+    healthCheckPath: /api/health
+
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+
+      # --- DeepSeek：对话 + 日记凝聚 ---
+      - key: DEEPSEEK_API_KEY
+        sync: false # 敏感值，请在 Render Dashboard 里手动填写
+      - key: DEEPSEEK_BASE_URL
+        value: https://api.deepseek.com/v1
+      - key: DEEPSEEK_MODEL
+        value: deepseek-chat
+
+      # --- MiMo：图片理解（"眼睛"）---
+      - key: MIMO_API_KEY
+        sync: false # 敏感值，请在 Render Dashboard 里手动填写
+      - key: MIMO_BASE_URL
+        value: https://api.xiaomimimo.com/v1
+      - key: MIMO_MODEL
+        value: mimo-v2.5
+
+      # 可选：把账号数据换到持久盘路径（需先升级付费计划并挂盘）
+      # - key: PARTICLE_DIARY_DATA_DIR
+      #   value: /var/data

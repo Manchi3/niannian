@@ -1,0 +1,113 @@
+```mermaid
+classDiagram
+    class User {
+        +string id
+        +string contact
+        +string nickname
+        +string? avatar
+        +number createdAt
+    }
+    class Memory {
+        +string id
+        +string text
+        +string source
+        +number createdAt
+    }
+    class AuthApi {
+        +sendCode(contact) Promise~void~
+        +register(input) Promise~AuthResponse~
+        +login(input) Promise~AuthResponse~
+        +fetchMe() Promise~User~
+        +updateProfile(patch) Promise~User~
+        +updatePassword(password) Promise~void~
+        +fetchMemories() Promise~Memory[]~
+        +addMemory(text) Promise~Memory~
+        +deleteMemory(id) Promise~void~
+    }
+    class AuthStore {
+        +string? token
+        +User? user
+        +AuthStatus status
+        +boolean authModalOpen
+        +boolean profileOpen
+        +boolean memoryOpen
+        +Memory[] memories
+        +sendCode(contact) Promise~void~
+        +register(input) Promise~void~
+        +login(input) Promise~void~
+        +logout() void
+        +restoreSession() Promise~void~
+        +updateProfile(patch) Promise~void~
+        +updatePassword(password) Promise~void~
+        +loadMemories() Promise~void~
+        +addMemory(text) Promise~void~
+        +deleteMemory(id) Promise~void~
+    }
+    class UidHelper {
+        +currentUid() string
+        +nnKey(k) string
+        +TOKEN_KEY string
+    }
+    class DiaryDb {
+        +saveDiary(diary, uid?) Promise~void~
+        +getDiary(id, uid?) Promise~Diary|null~
+        +getAllDiaries(uid?) Promise~Diary[]~
+        +deleteDiary(id, uid?) Promise~void~
+    }
+    class ImageStore {
+        +saveOriginalImage(id, blob, uid?) Promise~string|null~
+        +getOriginalImage(diary, uid?) Promise~Blob|null~
+        +deleteOriginalImage(diary, uid?) Promise~void~
+    }
+    class DiaryStore {
+        +Diary[] diaryList
+        +loadDiaries() Promise~void~
+        +saveDiary(diary, originalBlob?) Promise~void~
+        +deleteDiary(id) Promise~void~
+    }
+    class AuthModal { +open +onClose }
+    class UserMenu { +user }
+    class ProfileEditor { +open +onClose }
+    class MemoryModal { +open +onClose }
+    class AuthEntry { +user }
+
+    AuthStore --> AuthApi : 调用
+    AuthStore --> UidHelper : 依赖
+    DiaryStore --> DiaryDb : 唯一调用方
+    DiaryStore --> ImageStore
+    DiaryStore --> UidHelper
+    AuthModal ..> AuthStore : 读写
+    UserMenu ..> AuthStore : 读写
+    ProfileEditor ..> AuthStore : 读写
+    MemoryModal ..> AuthStore : 读写
+    AuthEntry ..> AuthStore : 读写
+
+    class JsonStore {
+        +readJson(path) Promise~T|null~
+        +writeJsonAtomic(path, data) Promise~void~
+        +withFileLock(key, fn) Promise~T~
+        +getUsers() Promise~User[]~
+        +saveUser(user) Promise~void~
+        +readMemories(uid) Promise~Memory[]~
+        +saveMemories(uid, list) Promise~void~
+    }
+    class Security {
+        +hashPassword(password) {salt, hash}
+        +verifyPassword(password, salt, hash) boolean
+        +issueToken(uid) string
+        +resolveToken(token) string|undefined
+        +issueCode(contact) string
+        +verifyCode(contact, code) boolean
+    }
+    class OptionalAuth { +handle(req,res,next) }
+    class AuthRouter { +post_code +post_register +post_login +get_me }
+    class UserRouter { +put_profile +put_password }
+    class MemoriesRouter { +get_list +post_create +delete_one }
+
+    AuthRouter --> JsonStore
+    AuthRouter --> Security
+    UserRouter --> JsonStore
+    UserRouter --> Security
+    MemoriesRouter --> JsonStore
+    MemoriesRouter --> OptionalAuth
+```
