@@ -7,16 +7,42 @@
 
 ---
 
+> ## ⚠️ 平台政策更新（2026-08 核实）
+>
+> 免费托管这几年变化很大，以下几点是查证后的现状，避免踩坑：
+>
+> - **Fly.io 已取消新账号免费额度**（2024 年 10 月起），网上大量教程仍在说
+>   「免费 3GB 持久卷」，那是**过期信息**，新用户注册后只有小额试用金。
+> - **Render 免费层确实存在，但新账号常触发风控强制绑信用卡**，
+>   且只接受 Visa / Mastercard，**银联借记卡不可用**。
+> - **Railway 是目前唯一「注册无需信用卡」的可用选项**：给 30 天 $5 试用金。
+>   这是本文档的主推方案。
+>
+> 结论：「永久免费 + 免信用卡 + 能跑 Node 后端」在 2026 年基本绝迹，
+> 免费方案要么限时（Railway 30 天），要么需要绑卡（Render）。
+
+---
+
+## 方案总览
+
+| 方案 | 花费 | 要信用卡 | 数据持久 | 适合 |
+|---|---|---|---|---|
+| **Railway**（主推） | 0 元（30 天） | **不需要** | 是（0.5GB 卷） | 先零成本跑一个月看效果 |
+| **Render** | 0 元 | 新账号要绑卡 | 否（重启丢失） | 手上有双币信用卡 |
+| **腾讯云/阿里云轻量** | ~10-30 元/月 | 不需要 | 是 | 长期稳定、国内访问快 |
+| ~~Fly.io~~ | — | 要 | — | 新账号已无免费额度，不推荐 |
+
+---
+
 ## 目录
 
-- [方案总览](#方案总览)
 - [第一步：代码推到 GitHub](#第一步代码推到-github)
-- [第二步：Render 一键部署](#第二步render-一键部署)
-- [第三步：填 API Key](#第三步填-api-key)
+- [第二步：Railway 部署](#第二步railway-部署)
 - [验证清单](#验证清单)
-- [数据持久化（重要）](#数据持久化重要)
-- [休眠与冷启动](#休眠与冷启动)
-- [备选：Fly.io（免费持久盘）](#备选flyio免费持久盘)
+- [数据持久化](#数据持久化)
+- [30 天试用结束后怎么办](#30-天试用结束后怎么办)
+- [备选：Render](#备选render)
+- [备选：腾讯云 / 阿里云轻量](#备选腾讯云--阿里云轻量)
 - [备选：Docker 自建](#备选docker-自建)
 - [自定义域名与备案](#自定义域名与备案)
 - [让别人能"搜到"（SEO）](#让别人能搜到seo)
@@ -24,23 +50,14 @@
 
 ---
 
-## 方案总览
-
-| 方案 | 花费 | 上手 | 数据持久 | 适合 |
-|---|---|---|---|---|
-| **Render 免费** | 0 元 | 10 分钟 | 否（重启丢失） | 演示、内测、发给朋友看 |
-| **Fly.io** | 0 元起 | 20 分钟 | 是（3GB 卷） | 想长期跑、账号不能丢 |
-| **腾讯云轻量** | ~10-30 元/月 | 1-2 小时 | 是 | 国内访问要快（需备案） |
-
----
-
 ## 第一步：代码推到 GitHub
 
-项目目前还不是 Git 仓库，先初始化。
+✅ **已完成** — 代码已推送至 `https://github.com/Manchi3/niannian`，首次提交 `2e65937`。
+
+如果是换台机器重来，步骤是：
 
 ```bash
-cd C:/Users/LEGLON/WorkBuddy/念念/particle_diary
-
+cd particle_diary
 git init
 git add .
 ```
@@ -65,40 +82,58 @@ git push -u origin main
 
 ---
 
-## 第二步：Render 一键部署
+## 第二步：Railway 部署
 
-1. 打开 <https://render.com>，用 **GitHub 账号**登录并授权
-2. 点 **New +** → **Blueprint**
-3. 选中刚推上去的仓库 → Render 会自动读取仓库里的 `render.yaml`
-4. 服务名 `particle-diary`、区域 `Singapore`、计划 `Free` 会自动填好
-5. 点 **Apply**，Render 开始构建（首次约 3-5 分钟）
+Railway 给新账号 **30 天 / $5 试用金**，注册**不需要信用卡**，
+足够跑一个 512MB 的小服务一整个月。
 
-构建完成后的网址形如：`https://particle-diary.onrender.com`
+### 1. 创建项目
 
-`render.yaml` 已经帮你配好了这些，不需要手动填：
+1. 打开 <https://railway.app>，点 **Login** → 用 **GitHub** 登录并授权
+2. 点 **New Project** → **Deploy from GitHub repo**
+3. 在列表里选 **Manchi3/niannian**（如果是第一次用，需要先授权 Railway 访问仓库）
+4. Railway 会自动读到仓库里的 `railway.json` + `Dockerfile`，开始构建
 
-| 配置项 | 值 | 说明 |
-|---|---|---|
-| Build Command | `npm ci && npm run build` | 装依赖 + 编译前端 |
-| Start Command | `npm start` | 即 `tsx server/index.ts` |
-| Health Check | `/api/health` | 后端已实现 |
-| Region | `singapore` | 对国内延迟低于美国节点 |
-| Node | `22` | 通过 `NODE_VERSION` 指定 |
+### 2. 设置环境变量（关键）
 
----
+项目创建后，点进服务卡片 → **Variables** 标签页 → **+ New Variable**，逐个添加：
 
-## 第三步：填 API Key
+| 变量名 | 值 |
+|---|---|
+| `DEEPSEEK_API_KEY` | 你的 DeepSeek key（**从本地 `.env` 里复制**） |
+| `MIMO_API_KEY` | 你的 MiMo key（**从本地 `.env` 里复制**） |
+| `DEEPSEEK_BASE_URL` | `https://api.deepseek.com/v1` |
+| `DEEPSEEK_MODEL` | `deepseek-chat` |
+| `MIMO_BASE_URL` | `https://api.xiaomimimo.com/v1` |
+| `MIMO_MODEL` | `mimo-v2.5` |
 
-部署完成后，两个密钥要在 Render 后台手动填（**不能写进代码或 yaml**）：
+> `PARTICLE_DIARY_DATA_DIR` 不需要填——`Dockerfile` 里已经设为 `/app/data`，
+> 下一步挂载的卷就落在这个路径。
+>
+> `PORT` 也不需要填——Railway 会自动注入，并覆盖 Dockerfile 里的默认值。
 
-1. 进入服务 → 左侧 **Environment**
-2. 找到这两项，把值填进去：
-   - `DEEPSEEK_API_KEY` — 对话 + 日记凝聚
-   - `MIMO_API_KEY` — 图片理解
-3. 点 **Save Changes**，Render 会自动重启服务
+### 3. 挂载持久卷（关键）
 
-> 建议在 DeepSeek 和小米 MiMo 平台设置**余额告警或消费上限**，
-> 公网服务一旦被别人刷，费用会实打实地扣。
+不加卷的话，账号数据写在容器文件系统里，重新部署就没了。
+
+1. 服务卡片 → **Settings** → 找到 **Volumes** 区域 → **+ New Volume**
+2. **Mount Path** 填：`/app/data`
+3. 保存后 Railway 会自动重新部署
+
+### 4. 生成公网域名
+
+1. 服务卡片 → **Settings** → **Networking** 区域
+2. 点 **Generate Domain**
+3. 得到一个形如 `https://niannian-production-xxxx.up.railway.app` 的地址
+
+这就是可以发给任何人的网址，自带 HTTPS。
+
+### 5. 设置用量提醒（建议）
+
+$5 额度用完后服务会直接停掉。去 **Settings** → **Usage** 开启用量通知，
+避免某天突然发现网站打不开了。
+
+512MB 内存常驻大约消耗 $5/月，所以**试用金大约刚好够跑满 30 天**。
 
 ---
 
@@ -108,95 +143,107 @@ git push -u origin main
 
 | # | 检查项 | 预期结果 |
 |---|---|---|
-| 1 | 访问 `https://xxx.onrender.com/api/health` | 返回 `{"status":"ok","service":"particle-diary-api"}` |
+| 1 | 访问 `https://你的域名/api/health` | 返回 `{"status":"ok","service":"particle-diary-api"}` |
 | 2 | 访问根路径 | 首页粒子动画正常，无白屏 |
 | 3 | 注册一个新账号 | 注册成功并能登录 |
 | 4 | 上传照片 → AI 搭话 | 能收到带图片理解的开场白 |
 | 5 | 聊几句 → 凝合日记 | 生成 ~100 字日记，无「聊起」等禁词 |
-| 6 | 刷新页面 | 账号和日记都还在（IndexedDB 按 uid 隔离） |
+| 6 | 重新部署一次服务 | 账号和日记**还在**（验证持久卷生效） |
+
+第 6 项请务必测——在 Railway 点一次 **Redeploy**，再看数据是否还在。
 
 ---
 
-## 数据持久化（重要）
+## 数据持久化
 
-**Render 免费层的磁盘是临时的。** 账号数据写在 `server/data/users.json`，
-以下情况会被清空：
+各平台对磁盘的处理差别很大，这是选方案时最该关注的点：
 
-- 服务休眠后重新唤醒
-- 每次重新部署
-- Render 的平台维护
+| 平台 | 磁盘行为 |
+|---|---|
+| **Railway**（挂卷后） | ✅ 数据在卷上，重新部署/重启都不丢 |
+| **Render 免费层** | ❌ 临时磁盘，休眠唤醒或重新部署即清空 |
+| **腾讯云/阿里云** | ✅ 自带磁盘，永久 |
 
-也就是说：**别人注册的账号，过一阵子可能就没了。** 演示够用，长期跑不行。
-
-三个解决办法，任选其一：
-
-**① 升级 Render Starter（$7/月 + $0.25/GB 磁盘）**
-在 `render.yaml` 里加一段：
-
-```yaml
-    disk:
-      name: niannian-data
-      mountPath: /var/data
-      sizeGB: 1
-```
-
-同时在环境变量加 `PARTICLE_DIARY_DATA_DIR=/var/data`。
-`server/utils/store.ts` 已支持这个变量，代码无需改动。
-
-**② 改用 Fly.io**
-免费额度自带 3GB 持久卷，见下一节。
-
-**③ 迁到真正的数据库**
-把 `users.json` 换成 SQLite / Postgres，是最彻底的方案，但要动 `server/` 代码。
+本项目通过 `PARTICLE_DIARY_DATA_DIR` 环境变量控制数据目录
+（`server/utils/store.ts` 已支持），换平台时改环境变量即可，**代码不用动**。
 
 ---
 
-## 休眠与冷启动
+## 30 天试用结束后怎么办
 
-Render 免费层 **15 分钟无请求自动休眠**，下次访问要等 30-50 秒冷启动——
-第一次打开会很慢，让人以为网站挂了。
+Railway 额度耗尽后服务会停止，数据保留 30 天。届时三个选择：
 
-免费保活办法：用 [UptimeRobot](https://uptimerobot.com) 之类的监控服务，
-每 5-10 分钟 ping 一次 `/api/health`。注意间隔别短于 5 分钟，否则可能违反 Render 的服务条款。
+1. **续费 Railway Hobby**（$5/月）— 最省事，配置不用动
+2. **迁到腾讯云/阿里云轻量**（~10-30 元/月）— 国内访问快、数据稳，见下一节
+3. **找张双币信用卡上 Render 免费层** — 长期 0 元，但要接受 15 分钟休眠和冷启动
+
+如果到时想迁走，记得先把 `server/data/` 下的内容备份下来。
 
 ---
 
-## 备选：Fly.io（免费持久盘）
+## 备选：Render
 
-Fly.io 的免费额度包含 3GB 持久卷，数据不会丢，是免费方案里更靠谱的选择。
+适合手上有 **Visa / Mastercard 双币信用卡** 的情况。
+注意：Render 官方称免费层不需要信用卡，但**新账号（尤其国内 IP 注册）
+常触发风控要求绑卡验证**，银联借记卡无法通过。
+
+步骤：
+
+1. <https://render.com> → 用 GitHub 登录
+2. **New +** → **Blueprint** → 选 `Manchi3/niannian`
+3. Render 自动读取 `render.yaml`（免费层、新加坡节点、健康检查 `/api/health`）
+4. 手动填 `DEEPSEEK_API_KEY` 和 `MIMO_API_KEY`
+5. 点 **Apply**，等 3-5 分钟构建
+
+已知短板：15 分钟无请求休眠，冷启动 30-60 秒；免费层磁盘临时，账号数据会丢。
+
+---
+
+## 备选：腾讯云 / 阿里云轻量
+
+**最推荐的长期方案**，尤其适合国内访问：
+
+| | Render / Railway | 腾讯云/阿里云轻量 |
+|---|---|---|
+| 支付方式 | 信用卡 | 支付宝 / 微信 |
+| 价格 | 免费或 $5/月 | 学生机约 10-30 元/月 |
+| 数据持久 | 受限 | 有真磁盘，永久 |
+| 国内访问速度 | 一般 | 快 |
+
+买到服务器后（选 Ubuntu 22.04），用仓库里的 `Dockerfile`：
 
 ```bash
-# 安装 CLI（Windows）
-powershell -Command "iwr https://fly.io/install.ps1 -useb | iex"
+# 装 Docker
+curl -fsSL https://get.docker.com | sh
 
-cd C:/Users/LEGLON/WorkBuddy/念念/particle_diary
+# 拉代码
+git clone https://github.com/Manchi3/niannian.git
+cd niannian
 
-fly auth login
-fly apps create particle-diary        # 名字全局唯一，被占用就换一个
+# 写环境变量
+cp .env.example .env
+nano .env          # 填入真实的 DEEPSEEK_API_KEY 和 MIMO_API_KEY
 
-# 创建 1GB 持久卷（对应 fly.toml 里的 niannian_data）
-fly volumes create niannian_data --region sin --size 1
-
-# 设置密钥（不会写进任何文件）
-fly secrets set DEEPSEEK_API_KEY=sk-你的key MIMO_API_KEY=你的key
-
-fly deploy
+# 构建并启动
+docker build -t niannian .
+docker run -d -p 80:3001 --env-file .env --restart unless-stopped --name niannian niannian
 ```
 
-之后每次更新代码只需 `fly deploy`。
+机器上还需在防火墙/安全组放行 80 端口。
+想上 HTTPS 就用 Nginx 反代 + Let's Encrypt。
 
 ---
 
 ## 备选：Docker 自建
 
-如果你有服务器（腾讯云/阿里云/家里 NAS），用仓库里的 `Dockerfile`：
+任何有 Docker 的环境都能跑：
 
 ```bash
-docker build -t particle-diary .
-docker run -d -p 3001:3001 --env-file .env --name niannian particle-diary
+docker build -t niannian .
+docker run -d -p 3001:3001 --env-file .env --name niannian niannian
 ```
 
-镜像是多阶段构建，运行时只装生产依赖，体积较小。
+镜像是多阶段构建，运行时只装生产依赖。
 配合 Nginx 反代 + Let's Encrypt 证书即可对外提供 HTTPS。
 
 ---
@@ -207,11 +254,11 @@ docker run -d -p 3001:3001 --env-file .env --name niannian particle-diary
 
 | 服务器位置 | 用域名需要备案吗 |
 |---|---|
-| 境外（Render / Fly.io / 香港） | **不需要** |
+| 境外（Railway / Render / 香港） | **不需要** |
 | 境内（腾讯云 / 阿里云大陆节点） | **必须备案**，约 2-4 周 |
 
-Render 免费层**支持绑定自定义域名**：服务设置 → Custom Domains → 添加域名，
-然后去你的域名服务商加一条 CNAME 解析指向 Render 给的地址，HTTPS 证书自动签发。
+Railway 和 Render 都支持绑定自定义域名（在服务设置里添加，
+再去域名服务商加一条 CNAME 解析），HTTPS 证书自动签发。
 
 想便宜买域名的话，`.top` / `.xyz` 首年通常几块钱；`.com` 约 60-80 元/年。
 
@@ -220,10 +267,11 @@ Render 免费层**支持绑定自定义域名**：服务设置 → Custom Domain
 ## 让别人能"搜到"（SEO）
 
 部署完别人输入网址能访问，但**百度/谷歌搜不到**——念念是 SPA，
-页面内容全靠 JS 渲染，爬虫抓到的基本是个空壳。要做SEO得额外补：
+页面内容全靠 JS 渲染，爬虫抓到的基本是个空壳。要做 SEO 得额外补：
 
-1. **基础 meta 标签** — 在 `index.html` 补 `<title>`、`<meta name="description">`、
-   Open Graph（`og:title` / `og:description` / `og:image`），分享到微信/QQ 时才有卡片
+1. **基础 meta 标签** — `index.html` 已有 `<title>` 和 `<meta description>`，
+   但缺 Open Graph（`og:title` / `og:description` / `og:image`），
+   补上后分享到微信/QQ 才会显示卡片
 2. **robots.txt + sitemap.xml** — 在项目根目录**新建 `public/` 文件夹**（目前还没有），
    把这两个文件放进去，Vite 构建时会自动复制到 `dist/` 根目录
 3. **提交收录** — [百度站长平台](https://ziyuan.baidu.com) 和
@@ -238,12 +286,19 @@ Render 免费层**支持绑定自定义域名**：服务设置 → Custom Domain
 ## 常见问题
 
 **Q：构建失败，提示内存不足（OOM）**
-`render.yaml` 里的 `buildCommand` 已通过 `NODE_OPTIONS=--max-old-space-size=460`
-限制构建期内存。若仍失败，把值降到 `384`，或改用 Fly.io（构建内存更宽裕）。
+Railway 构建资源比 Render 免费层宽裕，一般没问题。若真遇到，
+在 `Dockerfile` 的 build 阶段加一行：
+```dockerfile
+ENV NODE_OPTIONS=--max-old-space-size=460
+```
 
 **Q：网站能打开，但聊天没有回复**
-十有八九是 API Key 没填或填错。检查 Render 后台 Environment 里
-`DEEPSEEK_API_KEY` 和 `MIMO_API_KEY` 是否有值，改完记得 Save 触发重启。
+十有八九是 API Key 没填或填错。检查 Railway 的 **Variables** 里
+`DEEPSEEK_API_KEY` 和 `MIMO_API_KEY` 是否有值，改完会自动重新部署。
+
+**Q：重新部署后账号没了**
+说明持久卷没挂上。去 **Settings** → **Volumes** 确认 Mount Path 是 `/app/data`，
+并且 `PARTICLE_DIARY_DATA_DIR` 环境变量也是 `/app/data`（Dockerfile 里已默认设好）。
 
 **Q：国内打开首页很慢，或者白屏等很久才出内容**
 
@@ -260,7 +315,7 @@ Render 免费层**支持绑定自定义域名**：服务设置 → Custom Domain
    ```
 3. **换国内镜像** — 第三方镜像的稳定性没有保障，仅作临时过渡
 
-注意这只影响**访客侧**的加载速度，服务器（新加坡节点）自己拉取字体是正常的。
+注意这只影响**访客侧**的加载速度，服务器自己拉取字体是正常的。
 
 **Q：本地 `npm start` 报错找不到 tsx**
 `tsx` 已从开发依赖移到生产依赖，需要重新安装一次：
@@ -270,8 +325,8 @@ npm install
 ```
 
 **Q：改了代码后线上没变化**
-Render 默认开启自动部署，push 到 `main` 分支后会自动重新构建。
-如果关掉了，去服务页面手动点 **Manual Deploy** → **Deploy latest commit**。
+Railway 连接 GitHub 后，push 到 `main` 分支会自动重新构建部署。
+如果没有，去服务页面点 **Deploy** 手动触发。
 
 **Q：想回滚**
-Render 服务页 → **Events** → 找到历史部署 → **Rollback to this version**。
+Railway 服务页 → **Deployments** → 找到历史部署 → 点 **Rollback**。
