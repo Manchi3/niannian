@@ -206,9 +206,14 @@ export interface SendCodeResponse {
 /** Payload for POST /api/auth/register. */
 export interface RegisterInput {
   contact: string;
-  code: string;
+  /**
+   * Required. The password is the only credential protecting an account, so
+   * the server rejects anything shorter than 6 characters.
+   */
+  password: string;
   nickname?: string;
-  password?: string;
+  /** Optional legacy field: validated only when supplied. Not used by the UI. */
+  code?: string;
 }
 
 /** Payload for POST /api/auth/login (password OR code mode). */

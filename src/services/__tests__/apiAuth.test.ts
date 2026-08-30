@@ -184,8 +184,8 @@ describe('auth endpoints', () => {
       json: async () => ({ error: 'contact_exists', message: '该账号已注册，请直接登录' }),
     } as unknown as Response);
 
-    await expect(register({ contact: 'a@b.com', code: '123456' })).rejects.toThrow(
-      '该账号已注册，请直接登录',
-    );
+    await expect(
+      register({ contact: 'a@b.com', password: 'secret123' }),
+    ).rejects.toThrow('该账号已注册，请直接登录');
   });
 });

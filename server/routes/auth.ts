@@ -98,14 +98,17 @@ router.post('/register', async (req, res) => {
   }
   const c = contact.trim();
 
-  if (!code || !/^\d{6}$/.test(code)) {
-    return res.status(400).json({ error: 'invalid_code', message: '请输入 6 位验证码' });
-  }
-  if (password !== undefined && password !== '' && password.length < 6) {
+  // Password is now REQUIRED — with the code path demoted to optional, the
+  // password is the only thing standing between a stranger and someone's diary.
+  // Previously `hashPassword(password ?? '')` allowed blank-password accounts.
+  if (!password || password.length < 6) {
     return res.status(400).json({ error: 'weak_password', message: '密码至少 6 位' });
   }
-  if (!verifyCode(c, code)) {
-    return res.status(400).json({ error: 'invalid_code', message: '验证码错误或已过期' });
+  // Verification code is optional now: validated only when supplied.
+  if (code) {
+    if (!/^\d{6}$/.test(code) || !verifyCode(c, code)) {
+      return res.status(400).json({ error: 'invalid_code', message: '验证码错误或已过期' });
+    }
   }
 
   const users = await getUsers();

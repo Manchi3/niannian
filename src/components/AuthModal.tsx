@@ -76,7 +76,11 @@ export default function AuthModal(): React.ReactElement {
   const showToast = useToastStore((s) => s.showToast);
 
   const [mode, setMode] = useState<Mode>('login');
-  const [loginMethod, setLoginMethod] = useState<LoginMethod>('code');
+  // Password-only auth. Code login is gone: codes can't be delivered from the
+  // hosted environment, and echoing them to the client would let anyone sign
+  // in as anyone else. The state is kept (always 'password') so the remaining
+  // code plumbing can be lifted later if a mail provider ever becomes usable.
+  const [loginMethod, setLoginMethod] = useState<LoginMethod>('password');
   const [contact, setContact] = useState('');
   const [code, setCode] = useState('');
   const [password, setPassword] = useState('');
@@ -92,7 +96,7 @@ export default function AuthModal(): React.ReactElement {
   useEffect(() => {
     if (open) {
       setMode('login');
-      setLoginMethod('code');
+      setLoginMethod('password');
       setContact('');
       setCode('');
       setPassword('');
@@ -190,11 +194,10 @@ export default function AuthModal(): React.ReactElement {
   const canSubmit = useMemo(() => {
     if (submitting || !isValidContact(contact)) return false;
     if (mode === 'register') {
-      return isValidCode(code) && isValidPassword(password) && nickname.trim().length > 0;
+      return isValidPassword(password) && nickname.trim().length > 0;
     }
-    if (loginMethod === 'code') return isValidCode(code);
     return password.trim().length > 0;
-  }, [submitting, contact, mode, code, password, nickname, loginMethod]);
+  }, [submitting, contact, mode, password, nickname]);
 
   const handleSubmit = useCallback(async () => {
     const c = contact.trim();
@@ -202,13 +205,10 @@ export default function AuthModal(): React.ReactElement {
     // disabled while the form is invalid, so this rarely runs).
     const localErrors: FieldErrors = { ...EMPTY_ERRORS };
     localErrors.contact = contactError(c);
-    if (mode === 'register' || loginMethod === 'code') {
-      localErrors.code = codeError(code);
-    }
     if (mode === 'register') {
       localErrors.nickname = nicknameError(nickname);
       localErrors.password = passwordError(password);
-    } else if (loginMethod === 'password' && password.trim().length === 0) {
+    } else if (password.trim().length === 0) {
       localErrors.password = '请输入密码';
     }
     if (localErrors.contact || localErrors.code || localErrors.password || localErrors.nickname) {
@@ -220,13 +220,10 @@ export default function AuthModal(): React.ReactElement {
       if (mode === 'register') {
         await register({
           contact: c,
-          code,
           nickname: nickname.trim() || undefined,
-          password: password || undefined,
+          password,
         });
         // register() triggers window.location.reload() on success
-      } else if (loginMethod === 'code') {
-        await login({ contact: c, code });
       } else {
         await login({ contact: c, password });
       }
@@ -237,7 +234,7 @@ export default function AuthModal(): React.ReactElement {
       showToast(msg, { kind: 'error', duration: 3500 });
       setSubmitting(false);
     }
-  }, [mode, loginMethod, contact, code, password, nickname, register, login, showToast]);
+  }, [mode, contact, password, nickname, register, login, showToast]);
 
   const switchToCodeLogin = useCallback(() => {
     setLoginMethod('code');
@@ -322,48 +319,10 @@ export default function AuthModal(): React.ReactElement {
               error={errors.contact}
             />
 
-            {/* Segmented control (login only) */}
-            {isLogin && (
-              <div
-                className="mt-3 flex rounded-full p-1"
-                style={{ background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.07)' }}
-              >
-                {(
-                  [
-                    { key: 'code', label: '验证码登录' },
-                    { key: 'password', label: '密码登录' },
-                  ] as const
-                ).map((m) => (
-                  <button
-                    key={m.key}
-                    type="button"
-                    onClick={() => {
-                      setLoginMethod(m.key);
-                      setErrors(EMPTY_ERRORS);
-                    }}
-                    className="flex-1 rounded-full py-1.5 text-xs transition-all"
-                    style={{
-                      background: loginMethod === m.key ? 'rgba(212, 168, 83, 0.2)' : 'transparent',
-                      color: loginMethod === m.key ? 'rgba(212, 168, 83, 0.95)' : 'rgba(232, 221, 208, 0.45)',
-                    }}
-                  >
-                    {m.label}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {/* Second field: code OR password */}
-            {isLogin && loginMethod === 'code' ? (
-              <CodeField
-                value={code}
-                onChange={handleCodeChange}
-                countdown={countdown}
-                sending={sending}
-                onSend={handleSendCode}
-                error={errors.code}
-              />
-            ) : isLogin ? (
+            {/* Second field: password for sign-in.
+                The code/password segmented control and the "忘记密码了?" →
+                code-login escape hatch were removed along with code auth. */}
+            {isLogin ? (
               <PasswordField
                 value={password}
                 onChange={handlePasswordChange}
@@ -371,27 +330,9 @@ export default function AuthModal(): React.ReactElement {
                 onToggle={() => setShowPassword((s) => !s)}
                 placeholder="登录密码"
                 error={errors.password}
-                footer={
-                  <button
-                    type="button"
-                    onClick={switchToCodeLogin}
-                    className="text-[11px]"
-                    style={{ color: 'rgba(232, 221, 208, 0.35)' }}
-                  >
-                    忘记密码了?
-                  </button>
-                }
               />
             ) : (
               <>
-                <CodeField
-                  value={code}
-                  onChange={handleCodeChange}
-                  countdown={countdown}
-                  sending={sending}
-                  onSend={handleSendCode}
-                  error={errors.code}
-                />
                 <Field
                   icon={FIELD_ICONS.user}
                   placeholder="念念该怎么称呼你？"
@@ -405,7 +346,7 @@ export default function AuthModal(): React.ReactElement {
                   onChange={handlePasswordChange}
                   show={showPassword}
                   onToggle={() => setShowPassword((s) => !s)}
-                  placeholder="设置密码（推荐，下次登录免验证码）"
+                  placeholder="设置密码（至少 6 位）"
                   error={errors.password}
                 />
               </>
@@ -643,6 +584,12 @@ function Field({
 }
 
 /** Code input with inline "获取验证码" button + 60s countdown + error state. */
+/**
+ * Verification-code input. Currently NOT rendered — code auth was replaced by
+ * password-only login (see the note on `loginMethod`). Kept, together with
+ * `switchToCodeLogin`, so the flow can be restored if outbound SMTP ever
+ * becomes reachable from the host.
+ */
 function CodeField({
   value,
   onChange,
