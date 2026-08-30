@@ -38,10 +38,15 @@ function getTransporter(): nodemailer.Transporter {
       // 465 => implicit TLS from the start; anything else => STARTTLS upgrade
       secure: SMTP_PORT === 465,
       auth: { user: SMTP_USER, pass: SMTP_PASS },
-      // QQ / NetEase mailboxes are slow to greet; keep the handshake patient
-      connectionTimeout: 15_000,
-      greetingTimeout: 15_000,
-      socketTimeout: 20_000,
+      // Force IPv4. Some hosts (Railway free trial, notably) resolve to an
+      // IPv6 address that is unroutable from the container, producing
+      // ENETUNREACH on every send. Pinning to IPv4 works around that.
+      family: 4,
+      // Tight budgets: a stalled SMTP handshake must not leave the user
+      // staring at a spinner. Worst case is ~18s instead of the previous ~32s.
+      connectionTimeout: 8_000,
+      greetingTimeout: 8_000,
+      socketTimeout: 10_000,
     });
   }
   return transporter;
