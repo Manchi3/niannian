@@ -106,6 +106,30 @@ Railway 给新账号 **30 天 / $5 试用金**，注册**不需要信用卡**，
 | `DEEPSEEK_MODEL` | `deepseek-v4-flash` |
 | `MIMO_BASE_URL` | `https://api.xiaomimimo.com/v1` |
 | `MIMO_MODEL` | `mimo-v2.5` |
+| `SMTP_HOST` | `smtp.qq.com` |
+| `SMTP_PORT` | `465` |
+| `SMTP_USER` | 你的 QQ 邮箱完整地址 |
+| `SMTP_PASS` | QQ 邮箱**授权码**（见下方说明） |
+
+### 关于邮箱验证码（重要）
+
+生产环境下，登录/注册验证码**只通过邮件发送，绝不会在响应里回显**——
+否则任何人输入别人的邮箱就能拿到验证码登录，账号形同虚设。
+
+所以 **SMTP 这四项必须配**，否则用户点「获取验证码」会收到
+`验证码邮件发送失败` 的报错，无法注册。
+
+**获取 QQ 邮箱授权码**：
+1. 登录 <https://mail.qq.com> → **设置** → **账号**
+2. 找到 **POP3/IMAP/SMTP/Exchange/CardDAV/CalDAV 服务**
+3. 开启 **IMAP/SMTP 服务**，按提示用手机发短信验证
+4. 页面会生成一串 **16 位授权码**，复制它填到 `SMTP_PASS`
+   （**不是**你的 QQ 登录密码）
+
+其他邮箱同理，改 `SMTP_HOST` / `SMTP_PORT` 即可：
+网易 163 是 `smtp.163.com:465`，Gmail 是 `smtp.gmail.com:587`（587 走 STARTTLS）。
+
+> 注意：验证码只支持发到**邮箱**，手机号暂不支持（需要短信服务，且要域名备案）。
 
 > `PARTICLE_DIARY_DATA_DIR` 不需要填——`Dockerfile` 里已经设为 `/app/data`，
 > 下一步挂载的卷就落在这个路径。

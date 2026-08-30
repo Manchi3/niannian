@@ -19,6 +19,7 @@ import {
   verifyCode,
   verifyPassword,
 } from '../utils/security.js';
+import { sendVerificationCode } from '../utils/mailer.js';
 import type { StoredUser } from '../types.js';
 
 const router = Router();
@@ -42,7 +43,19 @@ router.post('/code', async (req, res) => {
       .json({ error: 'invalid_contact', message: '请输入有效的邮箱或手机号' });
   }
 
-  const { code, cooldownMs } = issueCode(contact.trim());
+  const recipient = contact.trim();
+
+  // Production delivers codes by email only. Reject mobile numbers *before*
+  // issuing a code — otherwise a rejected attempt would still burn the
+  // cooldown window and block the user's next (valid) email attempt.
+  if (!DEV_MODE && !recipient.includes('@')) {
+    return res.status(400).json({
+      error: 'email_required',
+      message: '目前仅支持邮箱注册，验证码会发送到你的邮箱',
+    });
+  }
+
+  const { code, cooldownMs } = issueCode(recipient);
   if (cooldownMs > 0) {
     return res.status(429).json({
       error: 'rate_limited',
@@ -52,9 +65,20 @@ router.post('/code', async (req, res) => {
   }
 
   if (DEV_MODE) {
-    console.log(`[Auth] 验证码 for ${contact.trim()}: ${code}`);
+    console.log(`[Auth] 验证码 for ${recipient}: ${code}`);
     return res.json({ ok: true, devCode: code, expiresInSec: 300 });
   }
+
+  // Production: the code goes to the owner's mailbox and is NEVER echoed back
+  // in the response — echoing it would let anyone sign in as anyone else.
+  const sent = await sendVerificationCode(recipient, code);
+  if (!sent) {
+    return res.status(502).json({
+      error: 'mail_failed',
+      message: '验证码邮件发送失败，请稍后重试',
+    });
+  }
+
   return res.json({ ok: true, expiresInSec: 300 });
 });
 
