@@ -326,8 +326,15 @@ export const SYSTEM_PROMPT_CONDENSE = `你是一个温柔的私人日记代笔�
 // API Configuration  (static — not runtime-tunable)
 // ---------------------------------------------------------------------------
 
-/** Default model name for DeepSeek. */
-export const DEFAULT_MODEL = 'deepseek-chat';
+/**
+ * Default model name for DeepSeek.
+ *
+ * NOTE: This constant is frontend-only and does NOT drive generation —
+ * the value actually used comes from `server/constants.ts` (overridable via
+ * the `DEEPSEEK_MODEL` env var). Kept in sync to avoid confusion.
+ * `deepseek-chat` / `deepseek-reasoner` are legacy aliases retired 2026-07-24.
+ */
+export const DEFAULT_MODEL = 'deepseek-v4-flash';
 
 /** API base URL for the Express backend (proxied through Vite in dev). */
 export const API_BASE_URL = '/api';

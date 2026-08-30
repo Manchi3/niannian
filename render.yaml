@@ -38,7 +38,8 @@ services:
       - key: DEEPSEEK_BASE_URL
         value: https://api.deepseek.com/v1
       - key: DEEPSEEK_MODEL
-        value: deepseek-chat
+        # 注意：deepseek-chat 是遗留别名，DeepSeek 已于 2026-07-24 弃用
+        value: deepseek-v4-flash
 
       # --- MiMo：图片理解（"眼睛"）---
       - key: MIMO_API_KEY

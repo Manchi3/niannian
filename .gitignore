@@ -9,9 +9,10 @@ dist*/
 dist-ssr/
 
 # Environment variables
+# .env.* 覆盖 .env.bak / .env.production 等一切变体，避免误提交真实密钥
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
 
 # IDE / Editor
 .vscode/

@@ -103,7 +103,7 @@ Railway 给新账号 **30 天 / $5 试用金**，注册**不需要信用卡**，
 | `DEEPSEEK_API_KEY` | 你的 DeepSeek key（**从本地 `.env` 里复制**） |
 | `MIMO_API_KEY` | 你的 MiMo key（**从本地 `.env` 里复制**） |
 | `DEEPSEEK_BASE_URL` | `https://api.deepseek.com/v1` |
-| `DEEPSEEK_MODEL` | `deepseek-chat` |
+| `DEEPSEEK_MODEL` | `deepseek-v4-flash` |
 | `MIMO_BASE_URL` | `https://api.xiaomimimo.com/v1` |
 | `MIMO_MODEL` | `mimo-v2.5` |
 
