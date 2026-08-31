@@ -158,6 +158,38 @@ function ThinkDots(): React.ReactElement {
 }
 
 /**
+ * VoiceDraft — the LIVE, non-persisted transcript bubble shown while the user
+ * is holding the voice button. Distinct (semi-transparent, with a sound-wave
+ * icon + "识别中…" label) from a real user message so the user can tell the
+ * difference. It is rendered only from store state — never added to the
+ * message list — so it triggers no AI reply and is discarded on ESC.
+ */
+function VoiceDraft({
+  text,
+  recording,
+}: {
+  text: string;
+  recording: boolean;
+}): React.ReactElement {
+  return (
+    <div className="voice-draft-bubble">
+      <span className="voice-draft-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}>
+          <path strokeLinecap="round" d="M4 10v4M8 6v12M12 3v18M16 6v12M20 10v4" />
+        </svg>
+      </span>
+      <div className="voice-draft-body">
+        <span className="voice-draft-label">识别中…</span>
+        <span className="voice-draft-text">
+          {text || ''}
+          {recording && <span className="voice-cursor" />}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/**
  * ChatPanel — bottom-centered chat overlay over the particle image.
  *
  * Round 21 behavior kept: the overlay is pointer-transparent except the
@@ -368,17 +400,15 @@ export default function ChatPanel({
               })}
 
             {/* Voice input draft bubble (full mode) — shows the live
-                transcript while the user is holding the voice button. */}
+                interim transcript while the user is holding the voice button.
+                Non-persisted; never triggers an AI reply. */}
             {textDisplayMode === 'full' && (isVoiceRecording || voiceTranscript) && (
               <motion.div
                 key="voice-draft"
                 {...fadeProps}
                 className="max-w-[85%] shrink-0 self-end"
               >
-                <div className="user-bubble">
-                  {voiceTranscript || ''}
-                  {isVoiceRecording && <span className="voice-cursor" />}
-                </div>
+                <VoiceDraft text={voiceTranscript} recording={isVoiceRecording} />
               </motion.div>
             )}
 
@@ -416,10 +446,7 @@ export default function ChatPanel({
         >
           {isVoiceRecording || voiceTranscript ? (
             <div className="ml-auto max-w-[85%]">
-              <div className="user-bubble">
-                {voiceTranscript || ''}
-                {isVoiceRecording && <span className="voice-cursor" />}
-              </div>
+              <VoiceDraft text={voiceTranscript} recording={isVoiceRecording} />
             </div>
           ) : isStreaming ? (
             <div className="mr-auto">

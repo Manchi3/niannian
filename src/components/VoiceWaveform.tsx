@@ -1,43 +1,57 @@
+import { useEffect, useRef } from 'react';
+import { getAudioLevel } from '../utils/audioMeter';
+
 /**
- * Animated voice waveform — a soft sine-like line that drifts while the user
- * is holding the voice button. Compact enough to fit inside the input pill.
+ * VoiceWaveform — a row of vertical bars whose heights track the REAL
+ * microphone level (via audioMeter.getAudioLevel, sampled every frame).
+ *
+ * When silent the bars keep a gentle idle breathing motion; when the user
+ * speaks they grow with the volume. All motion is imperative (rAF + refs) so
+ * the parent input bar never re-renders per frame.
  */
+const BAR_COUNT = 5;
+const IDLE_HEIGHT = 4; // px at silence
+const MAX_REACTIVE = 20; // px added at full volume
+
 export default function VoiceWaveform(): React.ReactElement {
+  const refs = useRef<(HTMLSpanElement | null)[]>([]);
+
+  useEffect(() => {
+    let raf = 0;
+    const start = performance.now();
+    const loop = (now: number): void => {
+      const level = getAudioLevel(); // 0..1
+      const t = (now - start) / 1000;
+      for (let i = 0; i < BAR_COUNT; i++) {
+        const el = refs.current[i];
+        if (!el) continue;
+        // Per-bar phase offset → the idle state looks alive, not static.
+        const phase = Math.sin(t * 6 + i * 0.9);
+        const idle = IDLE_HEIGHT + (phase + 1) * 1.5; // 4~7px gentle drift
+        // Reactive height scaled by volume; outer bars move a touch more.
+        const edgeBoost = 1 + Math.abs(i - (BAR_COUNT - 1) / 2) * 0.15;
+        const reactive = level * MAX_REACTIVE * (0.6 + 0.4 * Math.abs(phase));
+        const h = idle + reactive * edgeBoost;
+        el.style.height = `${h.toFixed(1)}px`;
+        el.style.opacity = (0.45 + level * 0.55).toFixed(2);
+      }
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
   return (
-    <div
-      className="pointer-events-none relative flex items-center justify-center"
-      style={{ width: '40px', height: '20px' }}
-      aria-hidden="true"
-    >
-      <svg
-        width="40"
-        height="20"
-        viewBox="0 0 40 20"
-        fill="none"
-        className="voice-waveform"
-      >
-        <path
-          d="M0 10 Q 10 4, 20 10 T 40 10"
-          stroke="rgba(212, 168, 83, 0.9)"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-          fill="none"
+    <div className="voice-waveform-bars" aria-hidden="true">
+      {Array.from({ length: BAR_COUNT }).map((_, i) => (
+        <span
+          key={i}
+          ref={(el) => {
+            refs.current[i] = el;
+          }}
+          className="voice-wave-bar"
         />
-        <path
-          d="M0 10 Q 10 16, 20 10 T 40 10"
-          stroke="rgba(232, 221, 208, 0.6)"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-          fill="none"
-        />
-      </svg>
-      <span
-        className="absolute h-1.5 w-1.5 rounded-full"
-        style={{
-          background: '#d4a853',
-          animation: 'voice-dot-pulse 1s ease-in-out infinite',
-        }}
-      />
+      ))}
     </div>
   );
 }

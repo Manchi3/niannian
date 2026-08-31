@@ -554,24 +554,22 @@ button,
   background: transparent;
 }
 
-/* Animated waveform lines inside the voice button. */
-.voice-waveform path {
-  opacity: 0.9;
+/* Real audio-driven waveform bars (Round 56) — heights are set imperatively
+   from the mic RMS level every frame by VoiceWaveform. */
+.voice-waveform-bars {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 24px;
 }
 
-.voice-waveform path:nth-child(2) {
-  animation: voice-wave-drift 1.4s ease-in-out infinite alternate;
-}
-
-@keyframes voice-wave-drift {
-  from {
-    opacity: 0.4;
-    transform: translateX(0);
-  }
-  to {
-    opacity: 0.9;
-    transform: translateX(3px);
-  }
+.voice-wave-bar {
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #d4a853, rgba(232, 221, 208, 0.7));
+  will-change: height, opacity;
 }
 
 /* Particle background shake while voice is active.
@@ -621,4 +619,83 @@ button,
     transform: scale(1.5);
     opacity: 1;
   }
+}
+
+/* Floating hint pill above the bar while recording (Round 56 — 图四). */
+.voice-hint-pill {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  padding: 5px 14px;
+  border-radius: 999px;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  color: rgba(232, 221, 208, 0.9);
+  background: rgba(15, 12, 9, 0.72);
+  border: 1px solid rgba(212, 168, 83, 0.35);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+}
+
+/* Live interim transcript bubble (Round 56 — ③). Distinct from a real user
+   message: semi-transparent, with a sound-wave icon + "识别中…" label. It is
+   rendered only from store state and never persisted / never triggers a reply. */
+.voice-draft-bubble {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: 100%;
+  padding: 10px 14px;
+  border-radius: 18px;
+  background: rgba(15, 12, 9, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.voice-draft-icon {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  color: rgba(212, 168, 83, 0.9);
+  animation: voice-dot-pulse 1.2s ease-in-out infinite;
+}
+
+.voice-draft-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.voice-draft-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.voice-draft-label {
+  font-size: 11px;
+  color: rgba(232, 221, 208, 0.5);
+  letter-spacing: 0.04em;
+}
+
+.voice-draft-text {
+  font-size: 14px;
+  line-height: 1.5;
+  color: rgba(232, 221, 208, 0.92);
+  word-break: break-word;
+}
+
+/* Outer wrapper that receives the voice-driven sway transform (Round 56).
+   No CSS transition — the transform is updated every frame by rAF, so the
+   engine files stay untouched (red line honored). */
+.particle-voice-sway {
+  position: absolute;
+  inset: 0;
+  will-change: transform;
 }

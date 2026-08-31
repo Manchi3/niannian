@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 
 // Stores
@@ -34,6 +34,7 @@ import CondensingOverlay from './CondensingOverlay';
 
 // Hooks
 import { useChat } from '../hooks/useChat';
+import { getAudioLevel } from '../utils/audioMeter';
 
 // Config
 import { CONFIG } from '../utils/constants';
@@ -158,6 +159,14 @@ export default function ChatMainView(): React.ReactElement {
   // background glow. null in text-only mode (no image).
   const [glowColor, setGlowColor] = useState<{ r: number; g: number; b: number } | null>(null);
 
+  // Round 56: voice-driven particle sway. The sway is applied to an OUTER
+  // wrapper (NOT the particle engine — red line intact) as a transform driven
+  // imperatively by rAF. These refs never trigger a React re-render.
+  const voiceSwayRef = useRef<HTMLDivElement>(null);
+  /** Mirrors isVoiceRecording so the rAF loop reads a stable value. */
+  const recordingRef = useRef(false);
+  recordingRef.current = isVoiceRecording;
+
   // Round 55: gate chat text strictly on `messageRevealPending` — DERIVED
   // synchronously, never via a laggy local boolean. While pending (review
   // entry) text is hidden from the FIRST paint; the moment the flag flips
@@ -213,6 +222,60 @@ export default function ChatMainView(): React.ReactElement {
       alive = false;
     };
   }, [currentImageDataUrl]);
+
+  // Round 56: voice-driven particle sway. A single rAF loop reads the shared
+  // mic level (audioMeter) + recording state and maps them to two controllable
+  // parameters — `swayAmplitude` (how wide the sway is) and `audioDrive`
+  // (extra displacement that follows the live volume). Both are smoothed with
+  // a lerp so nothing snaps. The target state machine:
+  //   - silence / not recording: swayAmplitude = 1 (slow original sway), audioDrive = 0
+  //   - holding but silent:       swayAmplitude = 1.8 (wider),        audioDrive = 0
+  //   - speaking:                 swayAmplitude = 1.2,                audioDrive = level(0..1)
+  // Applied to the outer .particle-voice-sway wrapper — the particle ENGINE
+  // itself is never touched (red line honored).
+  useEffect(() => {
+    if (!particleData || phase === 'idle') return;
+    let raf = 0;
+    let curAmp = 1; // current swayAmplitude (lerped)
+    let curDrive = 0; // current audioDrive (lerped)
+    const SILENCE_LEVEL = 0.04; // below this the mic is "silent"
+    const lerp = (a: number, b: number, t: number): number => a + (b - a) * t;
+    const loop = (): void => {
+      const level = getAudioLevel(); // 0..1
+      const recording = recordingRef.current;
+      let targetAmp = 1;
+      let targetDrive = 0;
+      if (recording) {
+        if (level > SILENCE_LEVEL) {
+          targetAmp = 1.2;
+          targetDrive = level;
+        } else {
+          targetAmp = 1.8;
+          targetDrive = 0;
+        }
+      }
+      curAmp = lerp(curAmp, targetAmp, 0.12);
+      curDrive = lerp(curDrive, targetDrive, 0.18);
+      const el = voiceSwayRef.current;
+      if (el) {
+        const t = performance.now() / 1000;
+        // Gentle baseline drift, widened by swayAmplitude.
+        const baseX = Math.sin(t * 0.6) * 3 * curAmp;
+        const baseY = Math.cos(t * 0.5) * 2 * curAmp;
+        // Audio-reactive extra displacement (follows the voice).
+        const driveY = Math.sin(t * 6) * curDrive * 14;
+        const driveX = Math.cos(t * 5.3) * curDrive * 10;
+        const rot = Math.sin(t * 0.4) * (curAmp - 1) * 1.2 + curDrive * 1.4;
+        const scale = 1 + curDrive * 0.03 + (curAmp - 1) * 0.012;
+        el.style.transform =
+          `translate3d(${(baseX + driveX).toFixed(2)}px, ${(baseY + driveY).toFixed(2)}px, 0) ` +
+          `rotate(${rot.toFixed(3)}deg) scale(${scale.toFixed(4)})`;
+      }
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, [particleData, phase]);
 
   // --- Handlers ---
 
@@ -591,10 +654,18 @@ export default function ChatMainView(): React.ReactElement {
                 : viewTab === 'diary'
                   ? 'particle-dim'
                   : ''
-            } ${isVoiceRecording ? 'particle-shake' : ''}`}
+            }`}
             style={{ position: 'fixed', inset: 0, zIndex: 0 }}
           >
-            <ParticleCanvas particleData={particleData} active={true} />
+            {/* Round 56: outer wrapper that receives the voice-driven sway
+                transform. The ParticleCanvas / engine itself is untouched. */}
+            <div
+              ref={voiceSwayRef}
+              className="particle-voice-sway"
+              style={{ position: 'absolute', inset: 0 }}
+            >
+              <ParticleCanvas particleData={particleData} active={true} />
+            </div>
           </div>
         )}
       </AnimatePresence>
