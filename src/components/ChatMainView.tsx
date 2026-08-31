@@ -132,6 +132,7 @@ export default function ChatMainView(): React.ReactElement {
   } = useAppStore();
 
   const { messages, clearMessages } = useChatStore();
+  const isVoiceRecording = useChatStore((s) => s.isVoiceRecording);
   const { saveDiary, setCurrentDiary, currentDiary, loadDiaries } = useDiaryStore();
   const showToast = useToastStore((s) => s.showToast);
   const { currentView } = useNavStore();
@@ -590,7 +591,7 @@ export default function ChatMainView(): React.ReactElement {
                 : viewTab === 'diary'
                   ? 'particle-dim'
                   : ''
-            }`}
+            } ${isVoiceRecording ? 'particle-shake' : ''}`}
             style={{ position: 'fixed', inset: 0, zIndex: 0 }}
           >
             <ParticleCanvas particleData={particleData} active={true} />

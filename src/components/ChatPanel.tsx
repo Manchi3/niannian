@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useChatStore } from '../stores/chatStore';
 import { useAppStore } from '../stores/appStore';
-import ChatInput from './ChatInput';
+import ChatInputBar from './ChatInputBar';
 import CondenseButton from './CondenseButton';
 
 /**
@@ -67,13 +67,12 @@ const INPUT_BOTTOM = '24px';
 const INPUT_HALF_W = '300px';
 /** Horizontal padding of the input bar container (each side, 1rem). */
 const INPUT_PADDING_X = '1rem';
-/** Gap between the input pill's visual right edge and the condense button. */
-const CONDENSE_GAP = '12px';
-/** Extra bottom offset so the shorter condense button visually centers
- *  against the taller input bar. */
-const CONDENSE_BOTTOM_OFFSET = '6px';
+/** Gap between the top of the input bar and the condense button. */
+const CONDENSE_ABOVE_GAP = '16px';
+/** Condense button sits centered above the input bar. */
+const CONDENSE_BOTTOM = `calc(${INPUT_BOTTOM} + 64px)`;
 /** Bottom of the single-mode bubble — just above the input bar top. */
-const SINGLE_BOTTOM = '94px';
+const SINGLE_BOTTOM = '104px';
 
 /** Typewriter reveal speed (ms per character). */
 const TYPEWRITER_SPEED_MS = 35;
@@ -175,6 +174,8 @@ export default function ChatPanel({
 }: ChatPanelProps): React.ReactElement {
   const { messages, streamingContent, isStreaming } = useChatStore();
   const markTyped = useChatStore((s) => s.markTyped);
+  const voiceTranscript = useChatStore((s) => s.voiceTranscript);
+  const isVoiceRecording = useChatStore((s) => s.isVoiceRecording);
   const textDisplayMode = useAppStore((s) => s.textDisplayMode);
 
   // --- Typewriter state: typingId is set while the latest AI reply is being
@@ -366,6 +367,21 @@ export default function ChatPanel({
                 );
               })}
 
+            {/* Voice input draft bubble (full mode) — shows the live
+                transcript while the user is holding the voice button. */}
+            {textDisplayMode === 'full' && (isVoiceRecording || voiceTranscript) && (
+              <motion.div
+                key="voice-draft"
+                {...fadeProps}
+                className="max-w-[85%] shrink-0 self-end"
+              >
+                <div className="user-bubble">
+                  {voiceTranscript || ''}
+                  {isVoiceRecording && <span className="voice-cursor" />}
+                </div>
+              </motion.div>
+            )}
+
             {/* Thinking-state stardust dots (full mode) — shown while the
                 reply is still arriving from the network. */}
             {textDisplayMode === 'full' && isStreaming && (
@@ -398,7 +414,14 @@ export default function ChatPanel({
             transition: 'opacity 0.7s ease-out',
           }}
         >
-          {isStreaming ? (
+          {isVoiceRecording || voiceTranscript ? (
+            <div className="ml-auto max-w-[85%]">
+              <div className="user-bubble">
+                {voiceTranscript || ''}
+                {isVoiceRecording && <span className="voice-cursor" />}
+              </div>
+            </div>
+          ) : isStreaming ? (
             <div className="mr-auto">
               <ThinkDots />
             </div>
@@ -451,22 +474,11 @@ export default function ChatPanel({
             pointerEvents: isCondensing ? 'none' : 'auto',
           }}
         >
-          <div
-            className="flex items-center gap-2 rounded-full px-4 py-2"
-            style={{
-              background: 'rgba(15, 12, 9, 0.65)',
-              backdropFilter: 'blur(12px)',
-              WebkitBackdropFilter: 'blur(12px)',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
-              boxShadow: '0 4px 24px rgba(0, 0, 0, 0.3)',
-            }}
-          >
-            <ChatInput
-              inputRef={inputRef}
-              sendDisabled={isStreaming || isTyping}
-              onSend={onSend}
-            />
-          </div>
+          <ChatInputBar
+            inputRef={inputRef}
+            sendDisabled={isStreaming || isTyping}
+            onSend={onSend}
+          />
         </div>
       )}
 
@@ -475,10 +487,10 @@ export default function ChatPanel({
           condensing is in flight; returns to normal immediately after. */}
       {showCondense && (
         <div
-          className="fixed bottom-0 z-20"
+          className="fixed bottom-0 z-20 -translate-x-1/2"
           style={{
-            bottom: `calc(${INPUT_BOTTOM} + ${CONDENSE_BOTTOM_OFFSET})`,
-            left: `calc(50% + ${INPUT_HALF_W} - ${INPUT_PADDING_X} + ${CONDENSE_GAP})`,
+            bottom: CONDENSE_BOTTOM,
+            left: '50%',
             pointerEvents: isCondensing ? 'none' : 'auto',
           }}
         >

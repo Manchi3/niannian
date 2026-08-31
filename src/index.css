@@ -514,3 +514,111 @@ button,
     opacity: 1;
   }
 }
+
+/* ====================================
+ * Voice input (Round 31)
+ *
+ * All voice UI is confined to the input bar / chat panel. The particle engine
+ * is not touched; the background shake is applied to the particle layer
+ * wrapper via the .particle-shake class (see particle-layer rules above).
+ * ==================================== */
+
+/* Blinking cursor appended to the live voice transcript draft bubble. */
+.voice-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 3px;
+  background: rgba(245, 240, 230, 0.85);
+  animation: blink 0.8s step-end infinite;
+  vertical-align: middle;
+}
+
+/* Voice hold-to-talk button inside the input pill. */
+.voice-hold-btn {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.voice-hold-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.voice-hold-btn:not(:disabled):active,
+.voice-hold-btn.voice-recording {
+  background: rgba(212, 168, 83, 0.12);
+}
+
+.voice-hold-btn.voice-empty {
+  background: transparent;
+}
+
+/* Animated waveform lines inside the voice button. */
+.voice-waveform path {
+  opacity: 0.9;
+}
+
+.voice-waveform path:nth-child(2) {
+  animation: voice-wave-drift 1.4s ease-in-out infinite alternate;
+}
+
+@keyframes voice-wave-drift {
+  from {
+    opacity: 0.4;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0.9;
+    transform: translateX(3px);
+  }
+}
+
+/* Particle background shake while voice is active.
+   Stacks with the existing sway / breathe animations where present. */
+.particle-layer.particle-shake {
+  animation: particle-sway 5.5s ease-in-out infinite,
+    particle-shake 0.12s ease-in-out infinite;
+}
+
+.particle-layer.particle-condensing.particle-shake {
+  animation:
+    particle-breathe 1s cubic-bezier(0.37, 0, 0.63, 1) infinite,
+    particle-sway 5.5s ease-in-out infinite,
+    particle-shake 0.12s ease-in-out infinite;
+}
+
+.particle-layer.particle-dim.particle-shake {
+  animation: particle-shake 0.12s ease-in-out infinite;
+}
+
+@keyframes particle-shake {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  20% {
+    transform: translate(-2px, 1px);
+  }
+  40% {
+    transform: translate(2px, -1px);
+  }
+  60% {
+    transform: translate(-1px, -2px);
+  }
+  80% {
+    transform: translate(1px, 2px);
+  }
+}
+
+@keyframes voice-dot-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+  50% {
+    transform: scale(1.5);
+    opacity: 1;
+  }
+}

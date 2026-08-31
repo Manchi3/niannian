@@ -21,11 +21,26 @@ interface ChatState {
    * diary is written without knowing what the picture showed.
    */
   imageDescription: string | null;
+  /**
+   * Live transcript of the current voice input. Rendered as a draft user
+   * bubble while the user is holding the voice button / spacebar.
+   */
+  voiceTranscript: string;
+  /** Whether the user is currently holding voice input (recording). */
+  isVoiceRecording: boolean;
+  /** Briefly true when voice input ended with no speech detected. */
+  showVoiceEmpty: boolean;
 
   /** Append a complete message to the list. */
   addMessage: (msg: Message) => void;
   /** Store the MiMo photo description for the later condense call. */
   setImageDescription: (description: string) => void;
+  /** Update the live voice transcript shown in the draft bubble. */
+  setVoiceTranscript: (text: string) => void;
+  /** Set whether voice recording is active. */
+  setVoiceRecording: (recording: boolean) => void;
+  /** Show/hide the 'no speech detected' empty state in the voice bar. */
+  setShowVoiceEmpty: (show: boolean) => void;
   /** Begin a new streaming session (clears streamingContent, sets isStreaming). */
   startStreaming: () => void;
   /** Append a text chunk to the current streaming content. */
@@ -43,10 +58,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
   streamingContent: '',
   isStreaming: false,
   imageDescription: null,
+  voiceTranscript: '',
+  isVoiceRecording: false,
+  showVoiceEmpty: false,
 
   addMessage: (msg) => set((state) => ({ messages: [...state.messages, msg] })),
 
   setImageDescription: (description) => set({ imageDescription: description }),
+
+  setVoiceTranscript: (text) => set({ voiceTranscript: text }),
+
+  setVoiceRecording: (recording) => set({ isVoiceRecording: recording }),
+
+  setShowVoiceEmpty: (show) => set({ showVoiceEmpty: show }),
 
   startStreaming: () => set({ streamingContent: '', isStreaming: true }),
 
@@ -86,5 +110,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       streamingContent: '',
       isStreaming: false,
       imageDescription: null,
+      voiceTranscript: '',
+      isVoiceRecording: false,
+      showVoiceEmpty: false,
     }),
 }));
