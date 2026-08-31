@@ -82,6 +82,12 @@ export default function ChatInputBar({
 
   const silenceTimerRef = useRef<number | null>(null);
   const emptyTimerRef = useRef<number | null>(null);
+  /** Pointer-y at the moment the hold started (for swipe-up detection). */
+  const holdStartYRef = useRef<number | null>(null);
+  /** Whether a hold is currently active (so pointerup/move can finalize). */
+  const holdActiveRef = useRef(false);
+  /** A swipe-up / pointer-leave cancels the in-flight recording. */
+  const SWIPE_UP_THRESHOLD_PX = 70;
 
   const finalizeRecording = useCallback(
     (finalText: string) => {
@@ -155,6 +161,59 @@ export default function ChatInputBar({
     setVoiceTranscript('');
     setShowVoiceEmpty(false);
   }, [abortRecording, setVoiceRecording, setVoiceTranscript, setShowVoiceEmpty]);
+
+  // --- Pointer handlers for the hold-to-talk bar (图六/图七).
+  // Normal release → finalize + send. Swipe-up / pointer leaving the bar /
+  // ESC → discard (cancel). All three are "cancel" per spec ④.
+  const onHoldPointerDown = useCallback(
+    (e: React.PointerEvent) => {
+      e.preventDefault();
+      holdStartYRef.current = e.clientY;
+      holdActiveRef.current = true;
+      startVoice();
+    },
+    [startVoice],
+  );
+
+  const onHoldPointerMove = useCallback(
+    (e: React.PointerEvent) => {
+      if (!holdActiveRef.current) return;
+      const rect = e.currentTarget.getBoundingClientRect();
+      const outside =
+        e.clientX < rect.left ||
+        e.clientX > rect.right ||
+        e.clientY < rect.top ||
+        e.clientY > rect.bottom;
+      const swipedUp =
+        holdStartYRef.current !== null &&
+        holdStartYRef.current - e.clientY > SWIPE_UP_THRESHOLD_PX;
+      if (outside || swipedUp) {
+        // Move out / swipe up → discard this recording.
+        holdActiveRef.current = false;
+        holdStartYRef.current = null;
+        cancelVoice();
+      }
+    },
+    [cancelVoice],
+  );
+
+  const onHoldPointerUp = useCallback(
+    (e: React.PointerEvent) => {
+      if (!holdActiveRef.current) return;
+      e.preventDefault();
+      holdActiveRef.current = false;
+      holdStartYRef.current = null;
+      stopVoice(); // finalize → send (or show empty hint)
+    },
+    [stopVoice],
+  );
+
+  const onHoldPointerCancel = useCallback(() => {
+    if (!holdActiveRef.current) return;
+    holdActiveRef.current = false;
+    holdStartYRef.current = null;
+    cancelVoice();
+  }, [cancelVoice]);
 
   // Auto-clear the empty-speech hint after a short delay.
   useEffect(() => {
@@ -268,7 +327,7 @@ export default function ChatInputBar({
             transition={{ duration: 0.18 }}
             className="voice-hint-pill"
           >
-            按住说话（按 ESC 取消）
+            长按说话（上滑或移出取消）
           </motion.div>
         )}
       </AnimatePresence>
@@ -317,31 +376,19 @@ export default function ChatInputBar({
                     color: showVoiceEmpty
                       ? 'rgba(232, 96, 96, 0.9)'
                       : 'rgba(232, 221, 208, 0.85)',
+                    touchAction: 'none',
                   }}
                   disabled={sendDisabled || !isSupported}
-                  aria-label={isVoiceRecording ? '正在录音，松开结束' : '按住说话'}
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    startVoice();
-                  }}
-                  onMouseUp={(e) => {
-                    e.preventDefault();
-                    stopVoice();
-                  }}
-                  onMouseLeave={(e) => {
-                    if (isVoiceRecording) {
-                      e.preventDefault();
-                      stopVoice();
-                    }
-                  }}
-                  onTouchStart={(e) => {
-                    e.preventDefault();
-                    startVoice();
-                  }}
-                  onTouchEnd={(e) => {
-                    e.preventDefault();
-                    stopVoice();
-                  }}
+                  aria-label={
+                    isVoiceRecording
+                      ? '正在录音，松开结束；上滑或移出取消'
+                      : '长按说话'
+                  }
+                  onPointerDown={onHoldPointerDown}
+                  onPointerMove={onHoldPointerMove}
+                  onPointerUp={onHoldPointerUp}
+                  onPointerLeave={onHoldPointerCancel}
+                  onPointerCancel={onHoldPointerCancel}
                 >
                   {isVoiceRecording ? (
                     <span className="pointer-events-none shrink-0">

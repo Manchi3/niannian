@@ -554,60 +554,30 @@ button,
   background: transparent;
 }
 
-/* Real audio-driven waveform bars (Round 56) — heights are set imperatively
-   from the mic RMS level every frame by VoiceWaveform. */
-.voice-waveform-bars {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  height: 24px;
+/* Single flowing sound-wave line (Round 57 — 图五). A single SVG <path>
+   whose `d` is rebuilt every frame from the mic's raw time-domain samples by
+   VoiceWaveform (Catmull-Rom smoothing). Thin, light, translucent white with
+   a faint gold glow. No fill, no bars. */
+.voice-wave-path {
+  display: block;
+  width: min(260px, 72%);
+  height: 26px;
+  overflow: visible;
 }
 
-.voice-wave-bar {
-  width: 4px;
-  height: 4px;
-  border-radius: 999px;
-  background: linear-gradient(180deg, #d4a853, rgba(232, 221, 208, 0.7));
-  will-change: height, opacity;
+.voice-wave-path path {
+  fill: none;
+  stroke: rgba(232, 221, 208, 0.85);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+  filter: drop-shadow(0 0 3px rgba(212, 168, 83, 0.45));
 }
 
-/* Particle background shake while voice is active.
-   Stacks with the existing sway / breathe animations where present. */
-.particle-layer.particle-shake {
-  animation: particle-sway 5.5s ease-in-out infinite,
-    particle-shake 0.12s ease-in-out infinite;
-}
-
-.particle-layer.particle-condensing.particle-shake {
-  animation:
-    particle-breathe 1s cubic-bezier(0.37, 0, 0.63, 1) infinite,
-    particle-sway 5.5s ease-in-out infinite,
-    particle-shake 0.12s ease-in-out infinite;
-}
-
-.particle-layer.particle-dim.particle-shake {
-  animation: particle-shake 0.12s ease-in-out infinite;
-}
-
-@keyframes particle-shake {
-  0%,
-  100% {
-    transform: translate(0, 0);
-  }
-  20% {
-    transform: translate(-2px, 1px);
-  }
-  40% {
-    transform: translate(2px, -1px);
-  }
-  60% {
-    transform: translate(-1px, -2px);
-  }
-  80% {
-    transform: translate(1px, 2px);
-  }
-}
+/* Particle background — Round 57: the voice effect is a radial BURST applied
+   to the OUTER .particle-voice-sway wrapper (scale-from-center), NOT a CSS
+   keyframe. The engine's own idle animations (sway/breathe) are untouched. */
 
 @keyframes voice-dot-pulse {
   0%,
@@ -691,9 +661,9 @@ button,
   word-break: break-word;
 }
 
-/* Outer wrapper that receives the voice-driven sway transform (Round 56).
-   No CSS transition — the transform is updated every frame by rAF, so the
-   engine files stay untouched (red line honored). */
+/* Outer wrapper that receives the voice-driven radial BURST transform
+   (Round 57). No CSS transition — the scale is updated every frame by rAF,
+   so the particle engine files stay untouched (red line honored). */
 .particle-voice-sway {
   position: absolute;
   inset: 0;

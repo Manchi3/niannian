@@ -56,21 +56,14 @@ interface ChatPanelProps {
  *     4 stardust dots float where the answer will appear (⑥).
  */
 const BUBBLE_AREA_MAX_W = 'min(56vw, 560px)';
-const INPUT_MAX_W = '600px';
+/** Bottom input container max width — spec 图六/图七: ~720px. */
+const INPUT_MAX_W = '720px';
 /** Top of the bubble history area — just below the 对话/日记 Tab. */
 const BUBBLE_TOP = '112px';
 /** Bottom of the bubble history area — just above the input bar. */
 const BUBBLE_BOTTOM = '104px';
 /** Distance from the viewport bottom to the input bar baseline. */
 const INPUT_BOTTOM = '24px';
-/** Half of the input's max width — used to anchor the condense button. */
-const INPUT_HALF_W = '300px';
-/** Horizontal padding of the input bar container (each side, 1rem). */
-const INPUT_PADDING_X = '1rem';
-/** Gap between the top of the input bar and the condense button. */
-const CONDENSE_ABOVE_GAP = '16px';
-/** Condense button sits centered above the input bar. */
-const CONDENSE_BOTTOM = `calc(${INPUT_BOTTOM} + 64px)`;
 /** Bottom of the single-mode bubble — just above the input bar top. */
 const SINGLE_BOTTOM = '104px';
 
@@ -483,12 +476,15 @@ export default function ChatPanel({
         </div>
       )}
 
-      {/* === Bottom Input Bar — independently viewport-centered ===
-          Round 21: pointer-events AUTO so the input / send button stay
-          clickable while everything around is pointer-transparent.
-          Round 26 (bug②): while condensing, this bar is already faded to 0
-          by the parent pane — force pointer-events off so the user can't
-          type into an invisible input. */}
+      {/* === Bottom Input + Condense container — viewport-centered, ~720px ===
+          Round 57 (图六/图七): a SINGLE container so the "✦ 凝聚记忆" capsule
+          and the input bar stay locked in the same box. The capsule is
+          right-aligned (justify-end) on a row ABOVE the input, so it never
+          jumps when the keyboard/voice input cross-fades underneath it. The
+          mode-toggle (🎤/⌨) stays an independent circular button outside the
+          bar (handled inside ChatInputBar).
+          Pointer-events are disabled only while condensing, so the user can't
+          type into the invisible input. */}
       {showInput && (
         <div
           className="fixed bottom-0 left-1/2 z-20 w-full -translate-x-1/2"
@@ -501,30 +497,23 @@ export default function ChatPanel({
             pointerEvents: isCondensing ? 'none' : 'auto',
           }}
         >
+          {/* Condense capsule — top-right, directly above the input bar. */}
+          {showCondense && (
+            <div
+              className="mb-3 flex justify-end"
+              style={{ pointerEvents: isCondensing ? 'none' : 'auto' }}
+            >
+              <CondenseButton
+                onClick={onCondense}
+                isLoading={isCondensing}
+                isThinking={isStreaming}
+              />
+            </div>
+          )}
           <ChatInputBar
             inputRef={inputRef}
             sendDisabled={isStreaming || isTyping}
             onSend={onSend}
-          />
-        </div>
-      )}
-
-      {/* === Condense button — floats to the right of the input bar ===
-          Round 22: enters the orbit state while the AI is thinking or while
-          condensing is in flight; returns to normal immediately after. */}
-      {showCondense && (
-        <div
-          className="fixed bottom-0 z-20 -translate-x-1/2"
-          style={{
-            bottom: CONDENSE_BOTTOM,
-            left: '50%',
-            pointerEvents: isCondensing ? 'none' : 'auto',
-          }}
-        >
-          <CondenseButton
-            onClick={onCondense}
-            isLoading={isCondensing}
-            isThinking={isStreaming}
           />
         </div>
       )}

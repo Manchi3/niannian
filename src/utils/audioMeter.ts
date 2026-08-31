@@ -106,6 +106,23 @@ export function getAudioLevel(): number {
   return currentLevel;
 }
 
+/**
+ * Sample the latest time-domain waveform into `count` evenly-spaced points,
+ * each normalized to [-1, 1]. Returns an array of zeros when the meter is
+ * inactive. Used by VoiceWaveform to draw a SINGLE flowing curve (图五) — the
+ * raw shape of the voice, not a bar graph.
+ */
+export function getWaveform(count: number): number[] {
+  const out = new Array<number>(count).fill(0);
+  if (!analyser || !timeData) return out;
+  const len = timeData.length;
+  for (let i = 0; i < count; i++) {
+    const idx = Math.floor((i / (count - 1)) * (len - 1));
+    out[i] = (timeData[idx] - 128) / 128; // center at 0, range -1..1
+  }
+  return out;
+}
+
 /** Whether the meter is currently running. */
 export function isAudioMeterActive(): boolean {
   return active;

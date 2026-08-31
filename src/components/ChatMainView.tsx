@@ -159,9 +159,13 @@ export default function ChatMainView(): React.ReactElement {
   // background glow. null in text-only mode (no image).
   const [glowColor, setGlowColor] = useState<{ r: number; g: number; b: number } | null>(null);
 
-  // Round 56: voice-driven particle sway. The sway is applied to an OUTER
-  // wrapper (NOT the particle engine — red line intact) as a transform driven
-  // imperatively by rAF. These refs never trigger a React re-render.
+  // Round 57: voice-driven particle BURST. The radial expansion is applied to
+  // an OUTER wrapper (NOT the particle engine — red line intact) as a scale
+  // transform driven imperatively by rAF. Scaling from the center makes the
+  // OUTER particles move outward (proportional to their distance from center)
+  // while the CENTER stays put — i.e. "外围炸开、中心稳定". There is NO
+  // translate / rotate, so the image never "shakes". These refs never trigger
+  // a React re-render.
   const voiceSwayRef = useRef<HTMLDivElement>(null);
   /** Mirrors isVoiceRecording so the rAF loop reads a stable value. */
   const recordingRef = useRef(false);
@@ -223,53 +227,46 @@ export default function ChatMainView(): React.ReactElement {
     };
   }, [currentImageDataUrl]);
 
-  // Round 56: voice-driven particle sway. A single rAF loop reads the shared
-  // mic level (audioMeter) + recording state and maps them to two controllable
-  // parameters — `swayAmplitude` (how wide the sway is) and `audioDrive`
-  // (extra displacement that follows the live volume). Both are smoothed with
-  // a lerp so nothing snaps. The target state machine:
-  //   - silence / not recording: swayAmplitude = 1 (slow original sway), audioDrive = 0
-  //   - holding but silent:       swayAmplitude = 1.8 (wider),        audioDrive = 0
-  //   - speaking:                 swayAmplitude = 1.2,                audioDrive = level(0..1)
-  // Applied to the outer .particle-voice-sway wrapper — the particle ENGINE
-  // itself is never touched (red line honored).
+  // Round 57: voice-driven radial BURST. A single rAF loop reads the shared
+  // mic level (audioMeter) + recording state and maps them to ONE controllable
+  // parameter — `burstAmount` (0..1) — which is applied as a scale transform
+  // on the outer .particle-voice-sway wrapper (centered). Scaling from the
+  // center is mathematically a radial offset: every point's displacement is
+  // proportional to its distance from center, so outer particles "炸开" and
+  // the center stays still. Smoothing via lerp — never a hard snap.
+  // State machine (all lerped):
+  //   - silence / not recording: burstAmount = 0  (scale 1 — only the engine's
+  //     own gentle idle breathing remains; no added motion, no shake)
+  //   - holding but silent:       burstAmount = 0.3 (mild outer expansion)
+  //   - speaking:                 burstAmount = 0.3..0.8 from the live RMS level
+  // The particle ENGINE itself is never touched (red line honored).
   useEffect(() => {
     if (!particleData || phase === 'idle') return;
     let raf = 0;
-    let curAmp = 1; // current swayAmplitude (lerped)
-    let curDrive = 0; // current audioDrive (lerped)
+    let curBurst = 0; // current burstAmount (lerped)
     const SILENCE_LEVEL = 0.04; // below this the mic is "silent"
+    const HOLD_BURST = 0.3; // holding silent → mild outer expansion
+    const SPEAK_FLOOR = 0.3; // speaking floor
+    const SPEAK_RANGE = 0.5; // speaking → up to 0.8
+    const BURST_SCALE = 0.2; // scale = 1 + burst * BURST_SCALE
     const lerp = (a: number, b: number, t: number): number => a + (b - a) * t;
     const loop = (): void => {
       const level = getAudioLevel(); // 0..1
       const recording = recordingRef.current;
-      let targetAmp = 1;
-      let targetDrive = 0;
+      let target = 0;
       if (recording) {
-        if (level > SILENCE_LEVEL) {
-          targetAmp = 1.2;
-          targetDrive = level;
-        } else {
-          targetAmp = 1.8;
-          targetDrive = 0;
-        }
+        // Outer particles expand while "listening"; expand more with volume.
+        target =
+          level > SILENCE_LEVEL
+            ? SPEAK_FLOOR + Math.min(1, level / 0.6) * SPEAK_RANGE
+            : HOLD_BURST;
       }
-      curAmp = lerp(curAmp, targetAmp, 0.12);
-      curDrive = lerp(curDrive, targetDrive, 0.18);
+      curBurst = lerp(curBurst, target, 0.1);
       const el = voiceSwayRef.current;
       if (el) {
-        const t = performance.now() / 1000;
-        // Gentle baseline drift, widened by swayAmplitude.
-        const baseX = Math.sin(t * 0.6) * 3 * curAmp;
-        const baseY = Math.cos(t * 0.5) * 2 * curAmp;
-        // Audio-reactive extra displacement (follows the voice).
-        const driveY = Math.sin(t * 6) * curDrive * 14;
-        const driveX = Math.cos(t * 5.3) * curDrive * 10;
-        const rot = Math.sin(t * 0.4) * (curAmp - 1) * 1.2 + curDrive * 1.4;
-        const scale = 1 + curDrive * 0.03 + (curAmp - 1) * 0.012;
-        el.style.transform =
-          `translate3d(${(baseX + driveX).toFixed(2)}px, ${(baseY + driveY).toFixed(2)}px, 0) ` +
-          `rotate(${rot.toFixed(3)}deg) scale(${scale.toFixed(4)})`;
+        // Pure scale-from-center → radial diffusion. No translate/rotate, so
+        // the whole picture never shakes (fixes Round 56's "抖得严重").
+        el.style.transform = `scale(${(1 + curBurst * BURST_SCALE).toFixed(4)})`;
       }
       raf = requestAnimationFrame(loop);
     };
@@ -662,7 +659,7 @@ export default function ChatMainView(): React.ReactElement {
             <div
               ref={voiceSwayRef}
               className="particle-voice-sway"
-              style={{ position: 'absolute', inset: 0 }}
+              style={{ position: 'absolute', inset: 0, transformOrigin: 'center center' }}
             >
               <ParticleCanvas particleData={particleData} active={true} />
             </div>
