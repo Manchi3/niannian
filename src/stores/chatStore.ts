@@ -15,9 +15,17 @@ interface ChatState {
   streamingContent: string;
   /** Whether a streaming response is in progress. */
   isStreaming: boolean;
+  /**
+   * MiMo description of the uploaded photo, emitted by the server before the
+   * first greeting chunk. Stored so `condense()` can replay it — otherwise the
+   * diary is written without knowing what the picture showed.
+   */
+  imageDescription: string | null;
 
   /** Append a complete message to the list. */
   addMessage: (msg: Message) => void;
+  /** Store the MiMo photo description for the later condense call. */
+  setImageDescription: (description: string) => void;
   /** Begin a new streaming session (clears streamingContent, sets isStreaming). */
   startStreaming: () => void;
   /** Append a text chunk to the current streaming content. */
@@ -34,8 +42,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
   messages: [],
   streamingContent: '',
   isStreaming: false,
+  imageDescription: null,
 
   addMessage: (msg) => set((state) => ({ messages: [...state.messages, msg] })),
+
+  setImageDescription: (description) => set({ imageDescription: description }),
 
   startStreaming: () => set({ streamingContent: '', isStreaming: true }),
 
@@ -69,5 +80,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
       ),
     })),
 
-  clearMessages: () => set({ messages: [], streamingContent: '', isStreaming: false }),
+  clearMessages: () =>
+    set({
+      messages: [],
+      streamingContent: '',
+      isStreaming: false,
+      imageDescription: null,
+    }),
 }));

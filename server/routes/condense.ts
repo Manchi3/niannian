@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { condenseChat } from '../utils/deepseek.js';
 import { optionalAuth } from '../middleware/auth.js';
-import type { ChatRequest } from '../types.js';
+import type { CondenseRequest } from '../types.js';
 
 const router = Router();
 router.use(optionalAuth);
@@ -12,11 +12,11 @@ router.use(optionalAuth);
  * Receives the full chat message history and returns a JSON object
  * with AI-generated diary title and content.
  *
- * Request body: { messages: [{ role, content }, ...] }
+ * Request body: { messages: [{ role, content }, ...], imageDescription?: string }
  * Response: { title: string, content: string }
  */
 router.post('/', async (req, res) => {
-  const { messages } = req.body as ChatRequest;
+  const { messages, imageDescription } = req.body as CondenseRequest;
 
   if (!messages || !Array.isArray(messages) || messages.length === 0) {
     return res.status(400).json({
@@ -25,7 +25,7 @@ router.post('/', async (req, res) => {
   }
 
   try {
-    const result = await condenseChat(messages);
+    const result = await condenseChat(messages, imageDescription);
     return res.status(200).json(result);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error';

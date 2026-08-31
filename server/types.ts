@@ -29,6 +29,21 @@ export interface ChatRequest {
   imageBase64?: string;
 }
 
+/** Request payload for POST /api/condense. */
+export interface CondenseRequest {
+  /** Full chat history to condense into a diary entry. */
+  messages: Array<{ role: MessageRole; content: string }>;
+  /**
+   * MiMo-generated description of the uploaded photo.
+   *
+   * The description is produced during the first greeting and echoed back to
+   * the client over SSE so it can be replayed here. Without it the diary
+   * loses all visual context, because the condense prompt replaces the system
+   * prompt that originally carried the description.
+   */
+  imageDescription?: string;
+}
+
 /** Response payload from POST /api/condense. */
 export interface CondenseResponse {
   /** AI-generated diary title. */
@@ -39,9 +54,15 @@ export interface CondenseResponse {
 
 /** A single SSE event chunk sent from the server. */
 export interface SSEChunk {
-  /** Event type. */
-  type: 'chunk' | 'done' | 'error';
-  /** Text fragment (only when type === 'chunk'). */
+  /**
+   * Event type.
+   * - `chunk` — a streamed text fragment
+   * - `image_description` — the MiMo photo description, sent once before the
+   *   first `chunk` so the client can store it for the later condense call
+   * - `done` / `error` — terminal events
+   */
+  type: 'chunk' | 'done' | 'error' | 'image_description';
+  /** Text fragment (chunk) or photo description (image_description). */
   content?: string;
   /** Error message (only when type === 'error'). */
   error?: string;

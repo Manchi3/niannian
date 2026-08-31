@@ -19,6 +19,7 @@ export function useChat() {
     startStreaming,
     appendStreamingContent,
     finishStreaming,
+    setImageDescription,
     isStreaming,
   } = useChatStore();
 
@@ -105,6 +106,10 @@ export function useChat() {
             setError(errorMessage);
             console.error('[useChat] Stream error:', errorMessage);
           },
+          // onImageDescription — stash it so the diary step can use the photo
+          (description) => {
+            setImageDescription(description);
+          },
         );
       } catch (err) {
         console.error('[useChat] caught error:', err);
@@ -119,6 +124,7 @@ export function useChat() {
       startStreaming,
       appendStreamingContent,
       finishStreaming,
+      setImageDescription,
       setPhase,
       setError,
     ],

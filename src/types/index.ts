@@ -143,9 +143,15 @@ export interface CondenseResponse {
 
 /** A single SSE event chunk sent from the server. */
 export interface SSEChunk {
-  /** Event type. */
-  type: 'chunk' | 'done' | 'error';
-  /** Text fragment (only when type === 'chunk'). */
+  /**
+   * Event type.
+   * - `chunk` — a streamed text fragment
+   * - `image_description` — the MiMo photo description, emitted once before
+   *   the first text chunk so the client can store it for the condense call
+   * - `done` / `error` — terminal events
+   */
+  type: 'chunk' | 'done' | 'error' | 'image_description';
+  /** Text fragment (chunk) or photo description (image_description). */
   content?: string;
   /** Error message (only when type === 'error'). */
   error?: string;

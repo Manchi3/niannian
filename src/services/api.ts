@@ -87,6 +87,12 @@ export async function chat(
   onChunk: (text: string) => void,
   onDone: () => void,
   onError: (error: string) => void,
+  /**
+   * Receives the MiMo photo description, which the server emits once before
+   * the first text chunk. Callers should stash it and hand it back to
+   * `condense()` so the diary keeps the visual context.
+   */
+  onImageDescription?: (description: string) => void,
 ): Promise<string> {
   let fullText = '';
   const controller = new AbortController();
@@ -231,6 +237,9 @@ export async function chat(
             clearStaleTimer();
             onError(chunk.error);
             return fullText;
+          } else if (chunk.type === 'image_description' && chunk.content) {
+            // Non-terminal — text chunks follow, so keep reading the stream.
+            onImageDescription?.(chunk.content);
           }
         } catch {
           // Ignore malformed JSON chunks
@@ -277,6 +286,7 @@ export async function chat(
 export async function condense(
   messages: { role: string; content: string }[],
   timeoutMs = 30000,
+  imageDescription?: string,
 ): Promise<CondenseResponse> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   const token = getToken();
@@ -287,7 +297,7 @@ export async function condense(
     const response = await fetch('/api/condense', {
       method: 'POST',
       headers,
-      body: JSON.stringify({ messages }),
+      body: JSON.stringify({ messages, imageDescription }),
       signal: controller.signal,
     });
 

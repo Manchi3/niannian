@@ -8,6 +8,7 @@ import {
   DEFAULT_MIMO_BASE_URL,
   MIMO_IMAGE_PROMPT,
   buildGreetingPromptWithImage,
+  buildCondensePromptWithImage,
 } from '../constants.js';
 
 /**
@@ -162,7 +163,11 @@ function buildMessages(
   let systemPrompt: string;
 
   if (promptType === 'condense') {
-    systemPrompt = SYSTEM_PROMPT_CONDENSE;
+    // Re-attach the photo: the condense call swaps out the system prompt that
+    // originally carried the MiMo description, so it has to be passed in again.
+    systemPrompt = imageDescription
+      ? buildCondensePromptWithImage(imageDescription)
+      : SYSTEM_PROMPT_CONDENSE;
   } else if (imageDescription) {
     // First greeting with image — inject the MiMo description
     systemPrompt = buildGreetingPromptWithImage(imageDescription);
@@ -234,17 +239,28 @@ export async function* streamChat(
  */
 export async function condenseChat(
   messages: ChatRequest['messages'],
+  imageDescription?: string,
 ): Promise<{ title: string; content: string }> {
   const client = getDeepSeekClient();
-  const apiMessages = buildMessages(messages, undefined, 'condense');
+  const apiMessages = buildMessages(messages, imageDescription, 'condense');
 
   const completion = await client.chat.completions.create({
     model: deepseekModel,
     messages: apiMessages as never,
     stream: false,
     max_tokens: 1000,
-    temperature: 0.7,
+    // 0.8, not 0.85 — measured: at 0.85 with json_object the model
+    // intermittently emits a run of pure whitespace instead of JSON.
+    temperature: 0.8,
+    // json_object is load-bearing, not cosmetic. Without it the model follows
+    // the conversation instead of the system prompt and replies with another
+    // chat turn ("最后调出来了吗？") rather than writing the diary — 0/4
+    // success when omitted, vs 4/4 with it.
     response_format: { type: 'json_object' },
+    // Diary writing needs no chain-of-thought, and reasoning tokens are billed
+    // and drawn from max_tokens. Disabling thinking cut latency ~3x
+    // (6-9s → 2-3s) and removed a whole class of blank responses.
+    extra_body: { thinking: { type: 'disabled' } },
   });
 
   const content = completion.choices[0]?.message?.content ?? '';

@@ -305,10 +305,14 @@ export default function ChatMainView(): React.ReactElement {
     setLoading(true);
     try {
       // Round 29 (⑤): always condense from the FULL, fresh chat history of
-      // this round — never a slice. The image context is already embedded in
-      // the conversation (MiMo description in the first greeting), so passing
-      // the complete history gives the prompt every message + the photo.
+      // this round — never a slice.
+      //
+      // The image context is NOT embedded in the conversation: the MiMo
+      // description lives in the greeting's system prompt, which the condense
+      // call swaps out. So we replay it explicitly — it was stashed in
+      // chatStore when the server emitted it over SSE.
       const fullMessages = useChatStore.getState().messages;
+      const imageDescription = useChatStore.getState().imageDescription ?? undefined;
       const baseCallMessages = fullMessages.map((m) => ({
         role: m.role,
         content: m.content,
@@ -336,12 +340,14 @@ export default function ChatMainView(): React.ReactElement {
                   role: 'user',
                   content:
                     `【格式复核】上一次凝聚结果不合格（原因：${lastReason}）。` +
-                    `请严格用第一人称（我 / 咱们）、80~150 字，写成"我"写给自己的私密日记，` +
-                    `不要出现"聊起 / 「」 / 你说 / 我们"等转述句式，直接输出 JSON {title, content}。`,
+                    `请严格用第一人称（全文只能出现"我"）、150-220 字、3-4 个短段，` +
+                    `要有具体感官细节（光线、动作、身体感觉、身边的物件），` +
+                    `写成"我"写给自己的私密日记，不要出现"聊起 / 「」 / 你说 / 我们 / 咱们"等转述句式，` +
+                    `直接输出 JSON {title, content}。`,
                 },
               ];
         try {
-          const candidate = await condenseApi(callMessages, 60000);
+          const candidate = await condenseApi(callMessages, 60000, imageDescription);
           if (!isValidCondenseResult(candidate)) {
             lastReason = '结果不完整（缺少标题或正文）';
             console.warn(

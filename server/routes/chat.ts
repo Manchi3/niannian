@@ -75,6 +75,14 @@ router.post('/', async (req, res: Response) => {
       }
     }
 
+    // --- Step 1.5: Hand the description back to the client ---
+    // The client stores it and replays it to /api/condense later. Without this
+    // the diary step would have no idea what the photo actually showed, since
+    // the condense call replaces the system prompt that carried it.
+    if (imageDescription) {
+      sendEvent({ type: 'image_description', content: imageDescription });
+    }
+
     // --- Step 2: Stream DeepSeek conversation with image context ---
     const stream = streamChat(messages, imageDescription);
 
