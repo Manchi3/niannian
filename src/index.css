@@ -534,10 +534,15 @@ button,
   vertical-align: middle;
 }
 
-/* Voice hold-to-talk button inside the input pill. */
+/* Voice hold-to-talk button inside the input pill. Round 58: it now owns its
+   own dark translucent background (the recording bar is a fixed 500×50 pill,
+   not the full-width outer wrapper), and the recording state gets NO yellow
+   block bg — only a faint gold rim glow (allowed). */
 .voice-hold-btn {
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
+  background: rgba(20, 16, 12, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .voice-hold-btn:disabled {
@@ -545,23 +550,27 @@ button,
   cursor: not-allowed;
 }
 
-.voice-hold-btn:not(:disabled):active,
+/* Recording: dark bg stays; only a faint gold rim + soft glow (no yellow fill). */
 .voice-hold-btn.voice-recording {
-  background: rgba(212, 168, 83, 0.12);
+  border-color: rgba(212, 168, 83, 0.28);
+  box-shadow:
+    0 0 0 1px rgba(212, 168, 83, 0.12),
+    0 0 16px rgba(212, 168, 83, 0.12);
 }
 
 .voice-hold-btn.voice-empty {
-  background: transparent;
+  background: rgba(20, 16, 12, 0.6);
 }
 
-/* Single flowing sound-wave line (Round 57 — 图五). A single SVG <path>
-   whose `d` is rebuilt every frame from the mic's raw time-domain samples by
-   VoiceWaveform (Catmull-Rom smoothing). Thin, light, translucent white with
-   a faint gold glow. No fill, no bars. */
+/* Single flowing sound-wave line (Round 58 — 图五). A single SVG <path>
+   whose `d` is rebuilt every frame by VoiceWaveform with heavy temporal
+   smoothing → big but gentle rolling waves. Thin, light, translucent white
+   with a faint gold glow. No fill, no bars. Height matches the 32-tall
+   viewBox so the amplitude maps 1:1. */
 .voice-wave-path {
   display: block;
-  width: min(260px, 72%);
-  height: 26px;
+  width: min(220px, 70%);
+  height: 28px;
   overflow: visible;
 }
 
@@ -591,29 +600,10 @@ button,
   }
 }
 
-/* Floating hint pill above the bar while recording (Round 56 — 图四). */
-.voice-hint-pill {
-  position: absolute;
-  bottom: calc(100% + 10px);
-  left: 50%;
-  transform: translateX(-50%);
-  white-space: nowrap;
-  padding: 5px 14px;
-  border-radius: 999px;
-  font-size: 12px;
-  letter-spacing: 0.02em;
-  color: rgba(232, 221, 208, 0.9);
-  background: rgba(15, 12, 9, 0.72);
-  border: 1px solid rgba(212, 168, 83, 0.35);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
-  pointer-events: none;
-}
-
 /* Live interim transcript bubble (Round 56 — ③). Distinct from a real user
-   message: semi-transparent, with a sound-wave icon + "识别中…" label. It is
-   rendered only from store state and never persisted / never triggers a reply. */
+   message: semi-transparent, with a sound-wave icon. It shows the recognized
+   text itself (updated live) — Round 58 removed the fixed "识别中…" label.
+   Rendered only from store state and never persisted / never triggers a reply. */
 .voice-draft-bubble {
   display: flex;
   align-items: flex-start;
@@ -646,12 +636,6 @@ button,
   flex-direction: column;
   gap: 2px;
   min-width: 0;
-}
-
-.voice-draft-label {
-  font-size: 11px;
-  color: rgba(232, 221, 208, 0.5);
-  letter-spacing: 0.04em;
 }
 
 .voice-draft-text {

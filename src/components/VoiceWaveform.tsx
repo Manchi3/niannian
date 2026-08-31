@@ -4,24 +4,31 @@ import { getAudioLevel, getWaveform } from '../utils/audioMeter';
 /**
  * VoiceWaveform — a SINGLE flowing sound-wave line (图五), NOT vertical bars.
  *
- * One SVG <path> whose `d` attribute is rebuilt every frame from the mic's
- * raw time-domain samples (audioMeter.getWaveform), smoothed with a
- * Catmull-Rom → cubic-bezier pass so the line flows. At silence the mic data
- * is flat, so a faint slow sine keeps the line "alive"; when the user speaks
- * the real waveform dominates and the curve rises and falls with the voice.
+ * One SVG <path> whose `d` is rebuilt every frame. Round 58: the curve is
+ * deliberately BIG but GENTLE — a few (20) control points, each smoothed in
+ * the TIME dimension with an exponential low-pass (smoothed = 0.85·prev +
+ * 0.15·raw), then joined with Catmull-Rom → cubic-bezier so it flows like
+ * silk. Peaks are tall (amplitude ×1.5+) but the heavy smoothing kills the
+ * high-frequency jitter, so it reads as slow rolling waves, never a sawtooth.
  *
- * Thin, light, translucent white with a faint gold glow — no fill, no bars.
- * Motion is imperative (rAF + refs); the parent input bar never re-renders
- * per frame. The mic stream itself is opened/released by the audioMeter
- * module (one getUserMedia, also shared with the particle burst) — this
- * component only reads samples.
+ * At silence the mic data is flat, so a slow LARGE sine keeps the line alive
+ * and gently breathing. Thin, light, translucent white with a faint gold glow
+ * — no fill, no bars. Motion is imperative (rAF + refs); the parent input bar
+ * never re-renders per frame. The mic stream itself is opened/released by the
+ * audioMeter module (one getUserMedia, also shared with the particle burst).
  */
 
-const POINT_COUNT = 44;
+/** Fewer control points → coarser but smoother, more "rolling" curve. */
+const POINT_COUNT = 20;
 const VIEW_W = 100;
-const VIEW_H = 26;
-const MID_Y = 13;
-const AMP = 10;
+const VIEW_H = 32;
+const MID_Y = 16;
+/** Larger amplitude so peaks read clearly, but the per-point low-pass keeps
+ *  the transition gentle (no high-frequency chatter). */
+const AMP = 15;
+/** Temporal low-pass coefficients (must sum to 1). */
+const SMOOTH_KEEP = 0.85;
+const SMOOTH_NEW = 0.15;
 
 /** Catmull-Rom → cubic-bezier smoothing of the sampled points. */
 function buildSmoothPath(values: number[]): string {
@@ -51,19 +58,26 @@ function buildSmoothPath(values: number[]): string {
 
 export default function VoiceWaveform(): React.ReactElement {
   const pathRef = useRef<SVGPathElement>(null);
+  // Persistent smoothed values — updated every frame with the low-pass.
+  const smoothedRef = useRef<number[]>(new Array<number>(POINT_COUNT).fill(0));
 
   useEffect(() => {
     let raf = 0;
     const start = performance.now();
     const loop = (now: number): void => {
       const level = getAudioLevel(); // 0..1
-      const samples = getWaveform(POINT_COUNT); // raw shape, -1..1
+      const raw = getWaveform(POINT_COUNT); // -1..1
+      const smoothed = smoothedRef.current;
+      // Exponential low-pass in the time dimension → kills jitter.
+      for (let i = 0; i < POINT_COUNT; i++) {
+        smoothed[i] = smoothed[i] * SMOOTH_KEEP + raw[i] * SMOOTH_NEW;
+      }
       const t = (now - start) / 1000;
-      // Faint idle breathing so the line is never dead-flat at silence;
-      // fades out as the real voice grows.
-      const idle = 1 - Math.min(1, level * 3);
-      const values = samples.map(
-        (s, i) => s + Math.sin(t * 1.6 + i * 0.5) * 0.05 * idle,
+      // Slow, LARGE idle breathing so the line is alive at silence; it fades
+      // out as the real voice grows. Low frequency → no chatter.
+      const idle = 1 - Math.min(1, level * 2.5);
+      const values = smoothed.map(
+        (s, i) => s + Math.sin(t * 0.8 + i * 0.45) * 0.18 * idle,
       );
       const path = pathRef.current;
       if (path) path.setAttribute('d', buildSmoothPath(values));

@@ -56,16 +56,20 @@ interface ChatPanelProps {
  *     4 stardust dots float where the answer will appear (⑥).
  */
 const BUBBLE_AREA_MAX_W = 'min(56vw, 560px)';
-/** Bottom input container max width — spec 图六/图七: ~720px. */
-const INPUT_MAX_W = '720px';
+/** Bottom input container max width — Round 58: narrowed so the recording bar
+ *  (fixed 500px) and keyboard input (~572px) both fit the spec's size range. */
+const INPUT_MAX_W = '660px';
 /** Top of the bubble history area — just below the 对话/日记 Tab. */
 const BUBBLE_TOP = '112px';
-/** Bottom of the bubble history area — just above the input bar. */
-const BUBBLE_BOTTOM = '104px';
+/** Bottom of the bubble history area — clears the full input stack
+ *  (condense capsule above + input pill) so the latest message / voice draft
+ *  bubble is never hidden behind the bottom UI (Round 58). */
+const BUBBLE_BOTTOM = '140px';
 /** Distance from the viewport bottom to the input bar baseline. */
 const INPUT_BOTTOM = '24px';
-/** Bottom of the single-mode bubble — just above the input bar top. */
-const SINGLE_BOTTOM = '104px';
+/** Bottom of the single-mode bubble — matches BUBBLE_BOTTOM for the same
+ *  clearance above the input stack (Round 58). */
+const SINGLE_BOTTOM = '140px';
 
 /** Typewriter reveal speed (ms per character). */
 const TYPEWRITER_SPEED_MS = 35;
@@ -153,8 +157,9 @@ function ThinkDots(): React.ReactElement {
 /**
  * VoiceDraft — the LIVE, non-persisted transcript bubble shown while the user
  * is holding the voice button. Distinct (semi-transparent, with a sound-wave
- * icon + "识别中…" label) from a real user message so the user can tell the
- * difference. It is rendered only from store state — never added to the
+ * icon) from a real user message so the user can tell the difference. It shows
+ * the RECOGNIZED TEXT ITSELF (updated live as interim results arrive) — no
+ * fixed "识别中…" label. Rendered only from store state — never added to the
  * message list — so it triggers no AI reply and is discarded on ESC.
  */
 function VoiceDraft({
@@ -172,7 +177,6 @@ function VoiceDraft({
         </svg>
       </span>
       <div className="voice-draft-body">
-        <span className="voice-draft-label">识别中…</span>
         <span className="voice-draft-text">
           {text || ''}
           {recording && <span className="voice-cursor" />}
@@ -235,7 +239,7 @@ export default function ChatPanel({
     if (el) {
       el.scrollTop = el.scrollHeight;
     }
-  }, [messages, streamingContent, textDisplayMode, typingId, messagesVisible]);
+  }, [messages, streamingContent, textDisplayMode, typingId, messagesVisible, voiceTranscript, isVoiceRecording]);
 
   // full mode → ALL messages; single mode → only the last one
   const historyMessages =

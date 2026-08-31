@@ -69,7 +69,9 @@ export async function startAudioMeter(): Promise<void> {
     const source = audioContext.createMediaStreamSource(stream);
     analyser = audioContext.createAnalyser();
     analyser.fftSize = 1024;
-    analyser.smoothingTimeConstant = 0.6;
+    // Round 58: heavier built-in smoothing so the raw time-domain samples are
+    // already low-passed before VoiceWaveform applies its own temporal filter.
+    analyser.smoothingTimeConstant = 0.85;
     source.connect(analyser);
     timeData = new Uint8Array(analyser.fftSize);
     active = true;

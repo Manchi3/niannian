@@ -56,8 +56,9 @@ function readPersistedMode(): InputMode {
  *   capsule sits centered ABOVE this bar (rendered by the parent ChatPanel).
  *
  * Recording state (hold the bar / Space / the mic button):
- *   - the bar turns into a real-time audio waveform;
- *   - a small pill "按住说话 (按 ESC 取消)" floats above the bar;
+ *   - the bar turns into a real-time audio waveform (single flowing line);
+ *   - the live transcript shows ONLY in the chat-area draft bubble (no
+ *     floating pill above the input);
  *   - release / silence auto-sends the transcript; nothing said → a brief
  *     "这次好像没说话" hint; ESC cancels without sending.
  *
@@ -316,109 +317,101 @@ export default function ChatInputBar({
 
   return (
     <div className="relative w-full">
-      {/* Floating hint pill above the bar — only while recording. */}
-      <AnimatePresence>
-        {isVoiceRecording && (
-          <motion.div
-            key="voice-hint"
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 6 }}
-            transition={{ duration: 0.18 }}
-            className="voice-hint-pill"
-          >
-            长按说话（上滑或移出取消）
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      <div
-        className="flex items-center gap-3 rounded-full px-4 py-2"
-        style={{
-          background: 'rgba(15, 12, 9, 0.65)',
-          backdropFilter: 'blur(12px)',
-          WebkitBackdropFilter: 'blur(12px)',
-          border: '1px solid rgba(255, 255, 255, 0.08)',
-          boxShadow: '0 4px 24px rgba(0, 0, 0, 0.3)',
-        }}
-      >
-        <div className="relative min-w-0 flex-1">
-          <AnimatePresence mode="wait" initial={false}>
-            {mode === 'keyboard' ? (
-              <motion.div
-                key="keyboard"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.25 }}
-                className="flex items-center gap-2"
+      {/* Outer row: the input (keyboard pill or voice hold-bar) + the always
+          visible mode-toggle circular button. The row is centered; in keyboard
+          mode the pill is flex-1 (full width), in voice mode the hold-bar is a
+          fixed 500×50 pill so it no longer spans the bottom (Round 58). */}
+      <div className="flex items-center justify-center gap-3">
+        <AnimatePresence mode="wait" initial={false}>
+          {mode === 'keyboard' ? (
+            <motion.div
+              key="keyboard"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.25 }}
+              className="flex min-w-0 flex-1 items-center"
+            >
+              <div
+                className="flex w-full items-center gap-2 rounded-full px-4 py-2"
+                style={{
+                  background: 'rgba(15, 12, 9, 0.65)',
+                  backdropFilter: 'blur(12px)',
+                  WebkitBackdropFilter: 'blur(12px)',
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  boxShadow: '0 4px 24px rgba(0, 0, 0, 0.3)',
+                }}
               >
                 <ChatInput
                   inputRef={inputRef}
                   sendDisabled={sendDisabled}
                   onSend={onSend}
                 />
-              </motion.div>
-            ) : (
-              <motion.div
-                key="voice"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.25 }}
+              </div>
+            </motion.div>
+          ) : (
+            <motion.div
+              key="voice"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.25 }}
+              className="flex items-center"
+            >
+              <button
+                type="button"
+                className={`voice-hold-btn flex items-center justify-center gap-3 rounded-full text-sm outline-none transition-colors select-none ${
+                  isVoiceRecording ? 'voice-recording' : ''
+                } ${showVoiceEmpty ? 'voice-empty' : ''}`}
+                style={{
+                  width: '500px',
+                  maxWidth: '100%',
+                  height: '50px',
+                  color: showVoiceEmpty
+                    ? 'rgba(232, 96, 96, 0.9)'
+                    : 'rgba(232, 221, 208, 0.85)',
+                  touchAction: 'none',
+                }}
+                disabled={sendDisabled || !isSupported}
+                aria-label={
+                  isVoiceRecording
+                    ? '正在录音，松开结束；上滑或移出取消'
+                    : '长按说话'
+                }
+                onPointerDown={onHoldPointerDown}
+                onPointerMove={onHoldPointerMove}
+                onPointerUp={onHoldPointerUp}
+                onPointerLeave={onHoldPointerCancel}
+                onPointerCancel={onHoldPointerCancel}
               >
-                <button
-                  type="button"
-                  className={`voice-hold-btn flex w-full items-center justify-center gap-3 rounded-full py-2.5 text-sm outline-none transition-colors select-none ${
-                    isVoiceRecording ? 'voice-recording' : ''
-                  } ${showVoiceEmpty ? 'voice-empty' : ''}`}
-                  style={{
-                    color: showVoiceEmpty
-                      ? 'rgba(232, 96, 96, 0.9)'
-                      : 'rgba(232, 221, 208, 0.85)',
-                    touchAction: 'none',
-                  }}
-                  disabled={sendDisabled || !isSupported}
-                  aria-label={
-                    isVoiceRecording
-                      ? '正在录音，松开结束；上滑或移出取消'
-                      : '长按说话'
-                  }
-                  onPointerDown={onHoldPointerDown}
-                  onPointerMove={onHoldPointerMove}
-                  onPointerUp={onHoldPointerUp}
-                  onPointerLeave={onHoldPointerCancel}
-                  onPointerCancel={onHoldPointerCancel}
-                >
-                  {isVoiceRecording ? (
-                    <span className="pointer-events-none shrink-0">
-                      <VoiceWaveform />
-                    </span>
-                  ) : showVoiceEmpty ? (
-                    <span className="pointer-events-none text-sm">这次好像没说话</span>
-                  ) : (
-                    <>
-                      <svg
-                        className="pointer-events-none h-4 w-4 shrink-0"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                        strokeWidth={1.8}
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          d="M19 11a7 7 0 01-14 0M12 15a3 3 0 003-3V6a3 3 0 00-6 0v6a3 3 0 003 3z"
-                        />
-                      </svg>
-                      <span className="pointer-events-none text-sm">按住说话 / 空格键</span>
-                    </>
-                  )}
-                </button>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
+                {isVoiceRecording ? (
+                  <span className="pointer-events-none shrink-0">
+                    <VoiceWaveform />
+                  </span>
+                ) : showVoiceEmpty ? (
+                  <span className="pointer-events-none text-sm">这次好像没说话</span>
+                ) : (
+                  <>
+                    <svg
+                      className="pointer-events-none h-4 w-4 shrink-0"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth={1.8}
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M19 11a7 7 0 01-14 0M12 15a3 3 0 003-3V6a3 3 0 00-6 0v6a3 3 0 003 3z"
+                      />
+                    </svg>
+                    <span className="pointer-events-none text-sm">按住说话 / 空格键</span>
+                  </>
+                )}
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {modeToggleButton}
       </div>
