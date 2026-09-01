@@ -8,7 +8,7 @@
  * AtmospherePanel imports it directly and modifies fields live.
  *
  * Round Auth: the CONFIG persistence key is uid-namespaced
- * (nn_${uid}_particle_atmosphere_config_v2) so each account keeps its own
+ * (nn_${uid}_particle_atmosphere_config_v3) so each account keeps its own
  * atmosphere settings. Module-level reads fall back to the guest namespace
  * until restoreSession() resolves the real user (the auth store calls
  * reloadConfig() after resolving).
@@ -25,8 +25,13 @@ import { nnKey } from './uid';
 
 export const CONFIG = {
   // --- Particle System ---
-  /** Target particle count. 150k–250k for a fine dot-matrix look. */
-  PARTICLE_COUNT: 200000,
+  /**
+   * Target particle count.
+   * Round 59: raised 200k → 400k so the default quality preset is "超清"
+   * (BASE_PARTICLE_COUNT × 2, see AtmospherePanel.QUALITY_PRESETS). The
+   * finer dot-matrix look reads much closer to the source photo.
+   */
+  PARTICLE_COUNT: 400000,
   /** Base particle size (legacy — used with uSizeAttenuation). */
   PARTICLE_BASE_SIZE: 0.018,
   /** Depth strength: how much pixel brightness affects Z position. */
@@ -36,8 +41,10 @@ export const CONFIG = {
    * small values (e.g. 0.15–0.3) crush the cloud into a thin "film"
    * while keeping subtle 3D relief. Applied as a shader uniform so it
    * takes effect live without rebuilding the particle geometry.
+   * Round 59: default 0.2 → 0.3 (a touch more relief to pair with the
+   * higher 400k density).
    */
-  DEPTH_THICKNESS: 0.2,
+  DEPTH_THICKNESS: 0.3,
   /** Sine-wave breathing amplitude. */
   PARTICLE_FLOAT_AMPLITUDE: 0.01,
   /** Color brightness multiplier (1.0 = exact image colors). */
@@ -48,10 +55,19 @@ export const CONFIG = {
   PARTICLE_SIZE_ATTENUATION: 300.0,
 
   // --- New Shader Parameters ---
-  /** Direct point-size base (replaces uSize*uSizeAttenuation combo). */
-  POINT_SIZE: 4.9,
-  /** Perspective depth factor for point-size attenuation. */
-  U_DEPTH: 28,
+  /**
+   * Direct point-size base (replaces uSize*uSizeAttenuation combo).
+   * Round 59: 4.9 → 1.7. At 400k particles the dots overlap heavily; a
+   * much smaller point size keeps the cloud crisp and airy instead of a
+   * solid paint smear.
+   */
+  POINT_SIZE: 1.7,
+  /**
+   * Perspective depth factor for point-size attenuation.
+   * Round 59: 28 → 33, slightly deeper perspective to match the finer
+   * point size.
+   */
+  U_DEPTH: 33,
   /** Normalised edge distance at which spreading begins (0–1). */
   SPREAD_START: 0.60,
   /** Outward spread strength for edge particles. */
@@ -162,6 +178,15 @@ export const CONFIG_DEFAULTS: Readonly<Record<string, number | boolean>> =
 // invalidated. Camera parameters are additionally excluded from both load
 // and save, so the in-code default camera Z is ALWAYS respected and can
 // never be overwritten by stale localStorage.
+//
+// NOTE (Round 59): bumped again to `_v3`. The four 基础参数 defaults changed
+// (PARTICLE_COUNT 200k→400k, POINT_SIZE 4.9→1.7, U_DEPTH 28→33,
+// DEPTH_THICKNESS 0.2→0.3). Without a key bump, an already-persisted
+// config from a previous visit would silently override the new in-code
+// defaults and the user would keep seeing the OLD values. Invalidating the
+// old key is the only way to make the new defaults actually visible on next
+// load. SIDE EFFECT: any other manually tuned atmosphere slider (力场/波动 …)
+// reverts to factory default once, for every existing device.
 // ---------------------------------------------------------------------------
 
 /** CONFIG keys that are never persisted — always use the in-code defaults. */
@@ -174,7 +199,7 @@ const NON_PERSISTED_KEYS = new Set<string>([
 /** Apply the saved CONFIG (for the current uid) onto the live CONFIG object. */
 function applySavedConfig(): void {
   try {
-    const saved = localStorage.getItem(nnKey('particle_atmosphere_config_v2'));
+    const saved = localStorage.getItem(nnKey('particle_atmosphere_config_v3'));
     if (saved) {
       const parsed = JSON.parse(saved) as Record<string, unknown>;
       for (const key of Object.keys(parsed)) {
@@ -213,7 +238,7 @@ export function saveConfig(): void {
         toStore[key] = configObj[key];
       }
     }
-    localStorage.setItem(nnKey('particle_atmosphere_config_v2'), JSON.stringify(toStore));
+    localStorage.setItem(nnKey('particle_atmosphere_config_v3'), JSON.stringify(toStore));
   } catch {
     // ignore quota / privacy-mode errors
   }
@@ -225,7 +250,7 @@ export function saveConfig(): void {
  */
 export function clearConfig(): void {
   try {
-    localStorage.removeItem(nnKey('particle_atmosphere_config_v2'));
+    localStorage.removeItem(nnKey('particle_atmosphere_config_v3'));
   } catch {
     // ignore
   }

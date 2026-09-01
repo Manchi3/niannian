@@ -140,15 +140,21 @@ const BASE_PARTICLE_COUNT = 200000;
 
 /**
  * Round Auth: the active quality preset index is stored per-account
- * (nn_${uid}_particleQuality) — read/written at call time via nnKey().
+ * (nn_${uid}_particleQuality_v3) — read/written at call time via nnKey().
+ *
+ * Round 59: key bumped to `_v3` in lockstep with the CONFIG storage key
+ * (particle_atmosphere_config_v3). The default density changed from 标准
+ * (200k) to 超清 (400k), so a stale saved index would keep highlighting
+ * the wrong button. Invalidating it lets the highlighted preset fall back
+ * to the derived value below — which now resolves to "超清".
  */
 function qualityStorageKey(): string {
-  return nnKey('particleQuality');
+  return nnKey('particleQuality_v3');
 }
 
 /**
  * Resolve the initial quality index from localStorage, falling back to
- * deriving it from the persisted CONFIG.PARTICLE_COUNT, then to "标准".
+ * deriving it from the persisted CONFIG.PARTICLE_COUNT, then to "超清".
  */
 function getInitialQualityIndex(): number {
   try {
@@ -162,10 +168,12 @@ function getInitialQualityIndex(): number {
   }
   // Fallback: derive from the (possibly persisted) particle count so the
   // highlighted button always matches the actually-rendered density.
+  // With the Round 59 default PARTICLE_COUNT = 400000 this resolves to
+  // index 2 ("超清", 200000 × 2).
   const idx = QUALITY_PRESETS.findIndex(
     (p) => Math.round(BASE_PARTICLE_COUNT * p.multiplier) === CONFIG.PARTICLE_COUNT,
   );
-  return idx >= 0 ? idx : 1;
+  return idx >= 0 ? idx : 2;
 }
 
 interface QualitySegmentedProps {
@@ -310,7 +318,7 @@ export default function AtmospherePanel({
     }
     saveConfig();
     // Clear the persisted quality preset so the segmented control snaps back
-    // to the default ("标准") highlight on next mount.
+    // to the default ("超清", 400k) highlight on next mount.
     try {
       localStorage.removeItem(qualityStorageKey());
     } catch {
