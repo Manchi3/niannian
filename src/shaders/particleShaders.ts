@@ -63,6 +63,12 @@ export const VERTEX_SHADER = /* glsl */ `
   uniform float uEdgeScatter;          // Edge halo scatter amplitude (world units)
   uniform float uZoomDefaultZ;         // Camera Z at "1x" zoom (point-size reference)
 
+  // Uniforms — voice "light-touch" dispersion (R65, additive — core untouched)
+  uniform float uVoiceEnv;     // shared envelope 0..1 (from audioMeter module)
+  uniform float uVoiceDisp;    // edge radial dispersion, fraction of cloud radius
+  uniform float uVoiceJitter;  // tangential jitter amplitude, fraction of cloud radius
+  uniform float uVoiceMaxR;    // precomputed cloud radius (world units)
+
   // Varyings
   varying vec3  vColor;
   varying float vAlpha;
@@ -178,6 +184,38 @@ export const VERTEX_SHADER = /* glsl */ `
     pos.x += scatterDir2.x * scatterFactor * uEdgeScatter;
     pos.y += scatterDir2.y * scatterFactor * uEdgeScatter;
     vScatter = scatterFactor;
+
+    // === 6. Voice "light-touch" dispersion (R65, additive — core untouched) ===
+    // Replaces the old whole-image CSS scale. Per-particle radial + tangential
+    // offset driven by ONE shared envelope (uVoiceEnv). w = r_norm² weights it
+    // so the CENTER stays put (w≈0) while the OUTER particles drift outward a
+    // few pixels — "外围粒子微微散开、中心几乎不动". Never scales the cloud.
+    //
+    // R66 hardening: the ENTIRE cloud shares this ONE ShaderMaterial, so a single
+    // compile failure here blanks ALL particles. To stay compatible with strict
+    // GLSL ES 1.00 compilers (Windows ANGLE / Direct3D) we avoid the ternary
+    // operator returning a vec2 and the "1e-4" exponent literal (both rejected by
+    // some drivers), and we clamp the envelope so a stray NaN can never fan out
+    // to every vertex.
+    float rNorm = length(aOriginalPosition.xy) / max(uVoiceMaxR, 0.0001);
+    float w = rNorm * rNorm;                  // center ~0, edge ~1
+    // Safe radial direction: divide by length, then ZERO it at the exact center
+    // so we never normalize() a near-zero vector (NaN on strict compilers).
+    float pLen = length(aOriginalPosition.xy);
+    // NOTE: named voiceRadial / voiceTangent (NOT radialDir) on purpose —
+    // the spread section above (line ~177) already declares vec3 radialDir
+    // in the same main() scope, and re-declaring it here is a GLSL
+    // "redefinition" COMPILE ERROR that kills the whole ShaderMaterial
+    // (all particles vanish). This collision existed since R65 and was the
+    // real cause of the "particle portrait disappears" regression.
+    vec2 voiceRadial = aOriginalPosition.xy / max(pLen, 0.0001);
+    voiceRadial *= step(0.0001, pLen);        // center particle → no offset
+    vec2 voiceTangent = vec2(-voiceRadial.y, voiceRadial.x);
+    float factor = 0.6 + aRandomSeed * 0.6;   // 0.6..1.2 per-particle randomness
+    float voiceEnv = clamp(uVoiceEnv, 0.0, 1.0); // never NaN/overshoot
+    float jitter = sin(aRandomSeed * 6.2831853 + uTime * 1.5) * uVoiceJitter;
+    pos.xy += voiceRadial * (w * voiceEnv * uVoiceDisp * uVoiceMaxR * factor);
+    pos.xy += voiceTangent * (w * voiceEnv * jitter * uVoiceMaxR);
 
     // === Transform ===
     vec4 mv = modelViewMatrix * vec4(pos, 1.0);

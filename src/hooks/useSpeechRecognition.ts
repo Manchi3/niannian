@@ -58,6 +58,21 @@ export function useSpeechRecognition({
   onEnd,
   onError,
 }: UseSpeechRecognitionOptions = {}) {
+  /**
+   * R63 semantics (important — read before touching):
+   * this ref holds the identity of the CURRENT recognition session. It is
+   *   - ASSIGNED  by startRecording()  (a new session supersedes the old one)
+   *   - CLEARED   by abortRecording()  and by the unmount cleanup
+   *   - **NOT** cleared by stopRecording()
+   * That last point matters: `recognition.stop()` is asynchronous — Chrome
+   * only fires `onend` once its speech service returns the final result,
+   * which can take 300ms-1s+. So a deliberately stopped session MUST keep
+   * its identity so the late onend still gets through and delivers the final
+   * text — that is exactly how the 2.5s silence auto-stop sends the message.
+   * Every callback therefore starts with an identity guard: a stale instance
+   * whose onend lands after a newer session began (or after an abort) is
+   * silently ignored instead of leaking a duplicate transcript.
+   */
   const recognitionRef = useRef<MinimalSpeechRecognition | null>(null);
   const finalRef = useRef('');
   const abortedRef = useRef(false);
@@ -97,6 +112,11 @@ export function useSpeechRecognition({
     recognition.maxAlternatives = 1;
 
     recognition.onresult = (event: MinimalSpeechRecognitionEvent) => {
+      // R63: identity guard — if a NEW session has superseded this instance
+      // (or it was aborted), ignore the event. Otherwise an in-flight result
+      // from a previous hold-release cycle would leak into the new session's
+      // transcript, and its late onend would re-send the previous utterance.
+      if (recognitionRef.current !== recognition) return;
       let interim = '';
       // Iterate ONLY the freshly delivered slice. Older results were already
       // counted in `finalRef.current` — re-counting them doubled the text in
@@ -113,6 +133,15 @@ export function useSpeechRecognition({
     };
 
     recognition.onend = () => {
+      // R63: identity guard (see recognitionRef docs above). Blocks TWO cases:
+      //   1. a newer session already started → this instance is stale;
+      //   2. the session was aborted / the component unmounted.
+      // A *deliberately stopped* session still passes (stopRecording no
+      // longer clears the ref), so the silence auto-stop keeps working.
+      if (recognitionRef.current !== recognition) return;
+      // This session is over — release the identity so a later late event
+      // from this same instance cannot deliver a second time.
+      recognitionRef.current = null;
       setIsRecording(false);
       // If the session was aborted (e.g. ESC), do not treat this as a final
       // completion; the caller already reset its UI state.
@@ -124,6 +153,7 @@ export function useSpeechRecognition({
     };
 
     recognition.onerror = (event: { error: string; message?: string }) => {
+      if (recognitionRef.current !== recognition) return;
       // 'aborted' is expected when the user manually cancels; 'no-speech'
       // means the microphone was active but nothing was recognized.
       if (event.error !== 'aborted') {
@@ -137,6 +167,11 @@ export function useSpeechRecognition({
     try {
       recognition.start();
     } catch {
+      // start() can throw if a session is already running. Drop the
+      // identity so this dead instance can never deliver an onend.
+      if (recognitionRef.current === recognition) {
+        recognitionRef.current = null;
+      }
       setIsRecording(false);
     }
   }, [onTranscript, onEnd, onError]);
@@ -150,8 +185,11 @@ export function useSpeechRecognition({
         // Already stopped or not started.
       }
     }
-    recognitionRef.current = null;
-    // If stop() does not fire onend synchronously, force state reset.
+    // R63: deliberately NOT clearing recognitionRef here. `stop()` is
+    // asynchronous — the session's `onend` must still be able to deliver the
+    // final transcript (that is the ONLY send path for the 2.5s silence
+    // auto-stop). The ref is released inside `onend` itself, or reassigned
+    // by the next startRecording(), or nulled by abortRecording()/unmount.
     setIsRecording(false);
   }, [isRecording]);
 

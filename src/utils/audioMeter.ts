@@ -23,6 +23,17 @@ let timeData: Uint8Array<ArrayBuffer> | null = null;
 
 /** Latest normalized RMS level (0 = silent, 1 = loud). */
 let currentLevel = 0;
+/** Latest raw RMS of the time-domain signal (0 = silent). */
+let currentRms = 0;
+/**
+ * R65: shared voice ENVELOPE (0..1). Both the waveform (VoiceWaveform) and the
+ * particle "light-touch" dispersion read THIS single value so they stay in
+ * perfect sync. Computed every frame with an asymmetric attack/release so the
+ * response is instant on onset (no perceptible delay) and soft on release.
+ * Lives in a module-level variable — NEVER in React state — so consumers can
+ * read it straight from their own rAF loop without triggering a re-render.
+ */
+let currentEnv = 0;
 /** Whether the meter is currently running (mic acquired, rAF looping). */
 let active = false;
 /** Set when stop() is requested while an async start() is still in flight. */
@@ -41,10 +52,20 @@ function computeFrame(): void {
     sumSquares += v * v;
   }
   const rms = Math.sqrt(sumSquares / timeData.length);
-  // RMS of speech is small; scale up so normal speaking clamps near 1, then
-  // apply a gentle soft-knee so whispers still register a little motion.
-  const normalized = Math.min(1, rms * 3.4);
-  currentLevel = normalized;
+  currentRms = rms;
+  // RMS of speech is small; scale up so normal speaking clamps near 1 — kept
+  // for backward-compat (getAudioLevel) and any legacy consumer.
+  currentLevel = Math.min(1, rms * 3.4);
+
+  // R65: shared envelope. target = (rms / 0.15)^0.7, clamped to [0,1] — a
+  // soft-knee so whispers (low rms) still lift the line a little, loud speech
+  // saturates. Asymmetric smoothing:
+  //   attack  k=0.5  → reaches target in 1–2 frames  (sensitive, ~zero delay)
+  //   release k=0.08 → ~0.4 s gentle settle back to rest (no click, no snap)
+  const target = Math.min(1, Math.pow(rms / 0.15, 0.7));
+  const k = target > currentEnv ? 0.5 : 0.08;
+  currentEnv += (target - currentEnv) * k;
+
   rafId = requestAnimationFrame(computeFrame);
 }
 
@@ -100,12 +121,29 @@ export function stopAudioMeter(): void {
   analyser = null;
   timeData = null;
   currentLevel = 0;
+  currentRms = 0;
+  currentEnv = 0;
   active = false;
 }
 
 /** Latest normalized level (0..1). Safe to call before start(). */
 export function getAudioLevel(): number {
   return currentLevel;
+}
+
+/**
+ * R65: the shared voice envelope (0..1). Safe to call before start() — returns
+ * 0 when the meter is inactive. Both VoiceWaveform and the particle dispersion
+ * read this every frame; it is updated inside the meter's own rAF loop, never
+ * via React state, so there is no re-render latency between the two consumers.
+ */
+export function getAudioEnv(): number {
+  return currentEnv;
+}
+
+/** Latest raw RMS of the time-domain signal. Safe to call before start(). */
+export function getAudioRms(): number {
+  return currentRms;
 }
 
 /**

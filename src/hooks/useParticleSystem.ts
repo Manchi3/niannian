@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import type { ParticleData } from '../types';
 import { VERTEX_SHADER, FRAGMENT_SHADER } from '../shaders/particleShaders';
 import { CONFIG } from '../utils/constants';
+import { getAudioEnv } from '../utils/audioMeter';
 
 /**
  * Return type of the useParticleSystem hook.
@@ -262,6 +263,17 @@ export function useParticleSystem(): ParticleSystemHandle {
 
     geometryRef.current = geometry;
 
+    // R65: precompute the cloud radius so the voice "light-touch" dispersion
+    // can normalize each particle's distance-from-center into r_norm ∈ [0,1]
+    // (center stays put, edge drifts most). originalPositions are already
+    // centered at the origin by the image processor.
+    let maxR = 1e-4;
+    const op = data.originalPositions;
+    for (let i = 0; i < op.length; i += 3) {
+      const r = Math.hypot(op[i], op[i + 1]);
+      if (r > maxR) maxR = r;
+    }
+
     // --- ShaderMaterial ---
     const rippleArray = Array.from(
       { length: CONFIG.RIPPLE_MAX_COUNT },
@@ -314,6 +326,14 @@ export function useParticleSystem(): ParticleSystemHandle {
         // Round 14 new uniforms
         uEdgeScatter: { value: CONFIG.EDGE_SCATTER },
         uZoomDefaultZ: { value: CONFIG.CAMERA_DEFAULT_Z },
+
+        // R65: voice "light-touch" dispersion — additive, engine core untouched.
+        // uVoiceEnv is fed every frame from the shared audio envelope
+        // (audioMeter.getAudioEnv) so the waveform and particles stay synced.
+        uVoiceEnv: { value: 0 },
+        uVoiceDisp: { value: 0.05 }, // edge radial drift as fraction of radius (~10-14px at default zoom)
+        uVoiceJitter: { value: 0.012 }, // tangential jitter as fraction of radius (~±3px)
+        uVoiceMaxR: { value: maxR },
       },
       transparent: true,
       depthWrite: false,
@@ -396,6 +416,12 @@ export function useParticleSystem(): ParticleSystemHandle {
     u.uBrightnessEnhance.value = CONFIG.BRIGHTNESS_ENHANCE;
     u.uEdgeScatter.value = CONFIG.EDGE_SCATTER;
     u.uZoomDefaultZ.value = CONFIG.CAMERA_DEFAULT_Z;
+
+    // R65: voice "light-touch" dispersion envelope. Read straight from the
+    // shared audio-meter scalar (a module-level ref, never React state) and
+    // write the GPU uniform directly — zero re-render latency, so the
+    // particles respond to the voice on the very next rendered frame.
+    u.uVoiceEnv.value = getAudioEnv();
     // Legacy size uniforms (kept for backward compat / fallback)
     u.uSize.value = CONFIG.PARTICLE_BASE_SIZE;
     u.uSizeAttenuation.value = CONFIG.PARTICLE_SIZE_ATTENUATION;

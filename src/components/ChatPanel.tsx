@@ -3,7 +3,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useChatStore } from '../stores/chatStore';
 import { useAppStore } from '../stores/appStore';
 import ChatInputBar from './ChatInputBar';
-import CondenseButton from './CondenseButton';
 
 /**
  * Props for the ChatPanel component.
@@ -11,12 +10,18 @@ import CondenseButton from './CondenseButton';
 interface ChatPanelProps {
   /** Callback when the user sends a message. */
   onSend?: (text: string) => void;
-  /** Called when the condense button is clicked. */
+  /** Called when the condense button is clicked (now lives inside ChatInputBar). */
   onCondense?: () => void;
   /** Whether the condense request is in flight. */
   isCondensing?: boolean;
   /** Whether the current phase allows condensing. */
   canCondense?: boolean;
+  /**
+   * R62: whether the condense capsule should currently be visible. Computed
+   * upstream as `canCondense && messages.length >= 2` (and `textDisplayMode
+   * !== 'hidden'`). Passed through to ChatInputBar.
+   */
+  showCondense?: boolean;
   /**
    * Round 53: when false, the message area starts hidden (opacity 0) and is
    * meant to fade in after the particle picture finishes forming (review
@@ -61,15 +66,17 @@ const BUBBLE_AREA_MAX_W = 'min(56vw, 560px)';
 const INPUT_MAX_W = '660px';
 /** Top of the bubble history area — just below the 对话/日记 Tab. */
 const BUBBLE_TOP = '112px';
-/** Bottom of the bubble history area — clears the full input stack
- *  (condense capsule above + input pill) so the latest message / voice draft
- *  bubble is never hidden behind the bottom UI (Round 58). */
-const BUBBLE_BOTTOM = '140px';
+/** Bottom of the bubble history area — clears the bottom input row
+ *  (mode-toggle + condense capsule on the right). R62: condensed from 140
+ *  → 116 since the condense capsule no longer occupies its own line above
+ *  the input — it now sits inline with the mode-toggle, adding only ~50px
+ *  of vertical height to the bottom row (already absorbed by INPUT_BOTTOM). */
+const BUBBLE_BOTTOM = '116px';
 /** Distance from the viewport bottom to the input bar baseline. */
 const INPUT_BOTTOM = '24px';
 /** Bottom of the single-mode bubble — matches BUBBLE_BOTTOM for the same
- *  clearance above the input stack (Round 58). */
-const SINGLE_BOTTOM = '140px';
+ *  clearance above the bottom row (R62). */
+const SINGLE_BOTTOM = '116px';
 
 /** Typewriter reveal speed (ms per character). */
 const TYPEWRITER_SPEED_MS = 35;
@@ -196,10 +203,19 @@ export default function ChatPanel({
   onCondense,
   isCondensing = false,
   canCondense = false,
+  showCondense = false,
   messagesVisible = true,
   revealIds = [],
 }: ChatPanelProps): React.ReactElement {
-  const { messages, streamingContent, isStreaming } = useChatStore();
+  /**
+   * R64: `messages` is subscribed with a DIRECT selector so the stream always
+   * renders the store's live array. No local mirror / stale snapshot that
+   * could lag one render behind the send — the user bubble must paint in the
+   * same frame the message is appended.
+   */
+  const messages = useChatStore((s) => s.messages);
+  const streamingContent = useChatStore((s) => s.streamingContent);
+  const isStreaming = useChatStore((s) => s.isStreaming);
   const markTyped = useChatStore((s) => s.markTyped);
   const voiceTranscript = useChatStore((s) => s.voiceTranscript);
   const isVoiceRecording = useChatStore((s) => s.isVoiceRecording);
@@ -296,9 +312,11 @@ export default function ChatPanel({
     };
   }, [textDisplayMode]);
 
-  // Round 21: the condense button appears when the phase allows it, enough
-  // conversation exists, AND text is not hidden.
-  const showCondense = canCondense && messages.length >= 2 && textDisplayMode !== 'hidden';
+  // Round 21: the condense button is rendered INSIDE ChatInputBar in R62 (next
+  // to the mode-toggle circular button) — controlled by `showCondense` which
+  // the parent computes as `canCondense && messages.length >= 2 &&
+  // textDisplayMode !== 'hidden'`. Kept here only as a no-op reference for
+  // existing chatStore subscription callers.
   // The input bar is hidden in 'hidden' mode (pure particle view).
   const showInput = textDisplayMode !== 'hidden';
 
@@ -339,24 +357,23 @@ export default function ChatPanel({
                 slight upward rise + 60ms stagger; everything else (normal
                 entry, or messages sent after the reveal) appears instantly. */}
             {textDisplayMode === 'full' &&
-              historyMessages.map((msg, idx) => {
-                // Round 61: while the user is speaking, hide the most-recent
-                // user message in the stream — the VoiceDraft bubble rendered
-                // RIGHT AFTER it occupies the same right-side slot with the
-                // visually-identical `user-bubble` style. Skipping the last
-                // user row avoids "two stacked bubbles with the same look"
-                // during live transcription. Assistant messages are kept
-                // (they sit on the left and don't collide with the right-side
-                // draft). On release, `addMessage()` appends a fresh user
-                // message; that one renders normally.
-                const isLast = idx === historyMessages.length - 1;
-                if (
-                  isLast &&
-                  msg.role === 'user' &&
-                  (isVoiceRecording || voiceTranscript)
-                ) {
-                  return null;
-                }
+              historyMessages.map((msg) => {
+                /**
+                 * R64: the Round-61 "hide the last user message while
+                 * recording" hack is GONE. It suppressed the newest user
+                 * bubble whenever `isVoiceRecording || voiceTranscript` was
+                 * truthy — and because a stale `voiceTranscript` could stay
+                 * in the store forever, the condition never turned off again,
+                 * so every subsequently sent message (including keyboard
+                 * ones) stayed hidden until the AI reply pushed it out of
+                 * the "last message" slot.
+                 *
+                 * The stream now renders the store's messages verbatim;
+                 * de-duplication against the live draft is handled purely by
+                 * the draft's own render condition (`isVoiceRecording &&
+                 * voiceTranscript`), which is false the instant recording
+                 * stops.
+                 */
                 const typewriter = shouldTypewrite(msg.id, msg.role, msg.typed);
                 const isReveal = revealIds.includes(msg.id);
                 const revealIndex = isReveal ? revealIds.indexOf(msg.id) : 0;
@@ -413,8 +430,16 @@ export default function ChatPanel({
 
             {/* Voice input draft bubble (full mode) — shows the live
                 interim transcript while the user is holding the voice button.
-                Non-persisted; never triggers an AI reply. */}
-            {textDisplayMode === 'full' && (isVoiceRecording || voiceTranscript) && (
+                Non-persisted; never triggers an AI reply.
+
+                R64: gated on `isVoiceRecording && voiceTranscript` — i.e. it
+                exists ONLY while the microphone is actually open. The moment
+                `recording` flips to false the draft disappears in that very
+                frame, independently of whether the transcript was cleared.
+                (The old `isVoiceRecording || voiceTranscript` condition let a
+                stale transcript keep the bubble pinned to the bottom of the
+                chat forever.) */}
+            {textDisplayMode === 'full' && isVoiceRecording && voiceTranscript && (
               <motion.div
                 key="voice-draft"
                 {...fadeProps}
@@ -456,7 +481,7 @@ export default function ChatPanel({
             transition: 'opacity 0.7s ease-out',
           }}
         >
-          {isVoiceRecording || voiceTranscript ? (
+          {isVoiceRecording && voiceTranscript ? (
             <div className="ml-auto max-w-[85%]">
               <VoiceDraft text={voiceTranscript} recording={isVoiceRecording} />
             </div>
@@ -495,15 +520,12 @@ export default function ChatPanel({
         </div>
       )}
 
-      {/* === Bottom Input + Condense container — viewport-centered, ~720px ===
-          Round 57 (图六/图七): a SINGLE container so the "✦ 凝聚记忆" capsule
-          and the input bar stay locked in the same box. The capsule is
-          right-aligned (justify-end) on a row ABOVE the input, so it never
-          jumps when the keyboard/voice input cross-fades underneath it. The
-          mode-toggle (🎤/⌨) stays an independent circular button outside the
-          bar (handled inside ChatInputBar).
-          Pointer-events are disabled only while condensing, so the user can't
-          type into the invisible input. */}
+      {/* === Bottom Input container — viewport-centered, ~720px ===
+          R62: the "✦ 凝聚记忆" capsule moved INSIDE ChatInputBar — it now
+          sits to the RIGHT of the mode-toggle circular button (the keyboard /
+          mic switcher), in the SAME bottom row as the input. Input width is
+          unchanged (660px). Pointer-events are disabled only while condensing,
+          so the user can't type into the invisible input. */}
       {showInput && (
         <div
           className="fixed bottom-0 left-1/2 z-20 w-full -translate-x-1/2"
@@ -516,23 +538,13 @@ export default function ChatPanel({
             pointerEvents: isCondensing ? 'none' : 'auto',
           }}
         >
-          {/* Condense capsule — top-right, directly above the input bar. */}
-          {showCondense && (
-            <div
-              className="mb-3 flex justify-end"
-              style={{ pointerEvents: isCondensing ? 'none' : 'auto' }}
-            >
-              <CondenseButton
-                onClick={onCondense}
-                isLoading={isCondensing}
-                isThinking={isStreaming}
-              />
-            </div>
-          )}
           <ChatInputBar
             inputRef={inputRef}
             sendDisabled={isStreaming || isTyping}
             onSend={onSend}
+            onCondense={onCondense}
+            isCondensing={isCondensing}
+            showCondense={showCondense}
           />
         </div>
       )}

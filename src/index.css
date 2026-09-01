@@ -412,6 +412,12 @@ button,
   transition: background 200ms ease, opacity 300ms ease;
   user-select: none;
   -webkit-user-select: none;
+  /* R70-bis: defensive anti-squeeze — ensure the capsule can never collapse
+     into a circle or wrap its text vertically if any ancestor (Unit B / wrap)
+     tries to constrain it. */
+  white-space: nowrap;
+  flex-shrink: 0;
+  min-width: max-content;
 }
 
 .condense-btn:hover:not(:disabled) {
@@ -469,12 +475,13 @@ button,
   border: 1.5px solid rgba(255, 255, 255, 0.4);
   border-radius: 50%;
   color: rgba(255, 255, 255, 0.5);
+  /* R68: only color/opacity transitions — NO width/height/transform so a
+     mode switch (or any state change) can never scale or shift this button. */
   transition:
     background 0.2s ease,
     border-color 0.2s ease,
     color 0.2s ease,
-    opacity 0.2s ease,
-    transform 0.2s ease;
+    opacity 0.2s ease;
 }
 
 .chat-send-btn:hover:not(:disabled) {
@@ -585,9 +592,9 @@ button,
   filter: drop-shadow(0 0 4px rgba(212, 168, 83, 0.4));
 }
 
-/* Particle background — Round 57: the voice effect is a radial BURST applied
-   to the OUTER .particle-voice-sway wrapper (scale-from-center), NOT a CSS
-   keyframe. The engine's own idle animations (sway/breathe) are untouched. */
+/* Particle background — R65: the voice "light-touch" dispersion is per-particle
+   in the engine vertex shader (uVoiceEnv), so this wrapper carries NO transform.
+   The old Round-57 CSS scale() burst is gone. Engine idle anims untouched. */
 
 @keyframes voice-dot-pulse {
   0%,
@@ -609,11 +616,9 @@ button,
    remains to signal "still listening", but the separate sound-wave icon,
    semi-transparent background, and bespoke `.voice-draft-*` rules are gone. */
 
-/* Outer wrapper that receives the voice-driven radial BURST transform
-   (Round 57). No CSS transition — the scale is updated every frame by rAF,
-   so the particle engine files stay untouched (red line honored). */
+/* Outer wrapper for the particle canvas. R65: carries no transform (the voice
+   dispersion is now in the engine shader). will-change left as a harmless hint. */
 .particle-voice-sway {
   position: absolute;
   inset: 0;
-  will-change: transform;
 }

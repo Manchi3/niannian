@@ -34,7 +34,6 @@ import CondensingOverlay from './CondensingOverlay';
 
 // Hooks
 import { useChat } from '../hooks/useChat';
-import { getAudioLevel } from '../utils/audioMeter';
 
 // Config
 import { CONFIG } from '../utils/constants';
@@ -134,6 +133,11 @@ export default function ChatMainView(): React.ReactElement {
 
   const { messages, clearMessages } = useChatStore();
   const isVoiceRecording = useChatStore((s) => s.isVoiceRecording);
+  // R62: read textDisplayMode at this level so we can compute `showCondense`
+  // (the condense capsule is only visible when the text overlay itself is
+  // visible) — `canCondense` alone is NOT enough because some review entries
+  // temporarily switch into 'hidden' mode.
+  const textDisplayMode = useAppStore((s) => s.textDisplayMode);
   const { saveDiary, setCurrentDiary, currentDiary, loadDiaries } = useDiaryStore();
   const showToast = useToastStore((s) => s.showToast);
   const { currentView } = useNavStore();
@@ -159,17 +163,10 @@ export default function ChatMainView(): React.ReactElement {
   // background glow. null in text-only mode (no image).
   const [glowColor, setGlowColor] = useState<{ r: number; g: number; b: number } | null>(null);
 
-  // Round 57: voice-driven particle BURST. The radial expansion is applied to
-  // an OUTER wrapper (NOT the particle engine — red line intact) as a scale
-  // transform driven imperatively by rAF. Scaling from the center makes the
-  // OUTER particles move outward (proportional to their distance from center)
-  // while the CENTER stays put — i.e. "外围炸开、中心稳定". There is NO
-  // translate / rotate, so the image never "shakes". These refs never trigger
-  // a React re-render.
-  const voiceSwayRef = useRef<HTMLDivElement>(null);
-  /** Mirrors isVoiceRecording so the rAF loop reads a stable value. */
-  const recordingRef = useRef(false);
-  recordingRef.current = isVoiceRecording;
+  // Round 57 → R65: the voice-driven particle dispersion used to be a CSS
+  // scale() on an OUTER wrapper (voiceSwayRef + recordingRef) driven by rAF.
+  // R65 removed that whole-image scale; the dispersion is now per-particle in
+  // the engine shader (uVoiceEnv), so those refs are gone.
 
   // Round 55: gate chat text strictly on `messageRevealPending` — DERIVED
   // synchronously, never via a laggy local boolean. While pending (review
@@ -227,66 +224,12 @@ export default function ChatMainView(): React.ReactElement {
     };
   }, [currentImageDataUrl]);
 
-  // Round 61: voice-driven particle BURST — "edge particles lightly tap",
-// not a whole-image zoom. The user explicitly asked: "一说话只需要边缘
-// 粒子灵动一些就好啦" — meaning the radial diffusion should be barely
-// perceptible as a scale, with the visible action confined to the outer
-// particles gently drifting outward by ~2-3 pixels.
-//
-// Tuning (R59 → R61):
-//   - BURST_SCALE 0.07 → 0.022 → max scale ≈ 1.022×, visually a NON-event
-//     for the picture as a whole. Edge-particle radial offset =
-//     (scale-1)·dist_from_center ≈ 0.022·edgeDist ≈ 2-3 px for a typical
-//     canvas — exactly the "轻触散开" feel requested.
-//   - HOLD_BURST 0.16 → 0.06 → holding silent is virtually motionless
-//     (≈1.0013×). No more "primed breath" visible at idle.
-//   - SPEAK_FLOOR 0.22 → 0.18, SPEAK_RANGE 0.48 → 0.70 → speaking range
-//     0.18..0.88 — burstAmount spans a wider range so the visual
-//     response to voice is unmistakable even with the tiny scale.
-//   - LERP_K 0.34 → 0.48 → ~99% catch-up in ~8 frames (~130 ms). Voice
-//     onset hits the particles almost instantly, no perceptible lag.
-  useEffect(() => {
-    if (!particleData || phase === 'idle') return;
-    let raf = 0;
-    let curBurst = 0; // current burstAmount (lerped)
-    const SILENCE_LEVEL = 0.045; // below this the mic is "silent"
-    const HOLD_BURST = 0.06; // holding silent → essentially no expansion
-    const SPEAK_FLOOR = 0.18; // speaking floor
-    const SPEAK_RANGE = 0.70; // speaking → up to ~0.88
-    const BURST_SCALE = 0.022; // scale = 1 + burst · BURST_SCALE (≈1.022 max)
-    const LERP_K = 0.48; // smoothness vs responsiveness (higher = snappier)
-    const lerp = (a: number, b: number, t: number): number => a + (b - a) * t;
-    const loop = (): void => {
-      const level = getAudioLevel(); // 0..1
-      const recording = recordingRef.current;
-      let target = 0;
-      if (recording) {
-        // Outer particles expand while "listening"; expand a bit more with
-        // volume — but never enough to scale the image noticeably.
-        target =
-          level > SILENCE_LEVEL
-            ? SPEAK_FLOOR + Math.min(1, level / 0.6) * SPEAK_RANGE
-            : HOLD_BURST;
-      }
-      curBurst = lerp(curBurst, target, LERP_K);
-      // Snap to 0 once we're vanishingly small — avoids "永远在 lerp 接近 0"
-      // floating-point drift.
-      if (!recording && curBurst < 1e-4) curBurst = 0;
-      const el = voiceSwayRef.current;
-      if (el) {
-        // Pure scale-from-center → radial diffusion. No translate/rotate, so
-        // the whole picture never "shakes" (Round 56 bug fixed in R57).
-        // With BURST_SCALE = 0.022 the picture's overall size is visually
-        // unchanged; the only motion the eye catches is the outer particles
-        // drifting outward by a couple of pixels — exactly the "轻触" the
-        // user asked for.
-        el.style.transform = `scale(${(1 + curBurst * BURST_SCALE).toFixed(4)})`;
-      }
-      raf = requestAnimationFrame(loop);
-    };
-    raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
-  }, [particleData, phase]);
+  // R65: the voice "light-touch" particle dispersion now lives ENTIRELY in the
+  // engine's vertex shader (uVoiceEnv uniform, additive — see particleShaders.ts
+  // section 6). The old whole-image CSS scale() on the wrapper below is GONE;
+  // the engine reads the shared audio envelope (getAudioEnv) every frame and
+  // pushes only the OUTER particles outward (w = r_norm²), so the picture never
+  // scales and the center stays put. No rAF / transform wiring is needed here.
 
   // --- Handlers ---
 
@@ -668,12 +611,12 @@ export default function ChatMainView(): React.ReactElement {
             }`}
             style={{ position: 'fixed', inset: 0, zIndex: 0 }}
           >
-            {/* Round 56: outer wrapper that receives the voice-driven sway
-                transform. The ParticleCanvas / engine itself is untouched. */}
+            {/* Particle layer. The voice "light-touch" dispersion is applied
+                per-particle inside the engine shader now (R65) — no wrapper
+                transform needed here. */}
             <div
-              ref={voiceSwayRef}
               className="particle-voice-sway"
-              style={{ position: 'absolute', inset: 0, transformOrigin: 'center center' }}
+              style={{ position: 'absolute', inset: 0 }}
             >
               <ParticleCanvas particleData={particleData} active={true} />
             </div>
@@ -815,6 +758,15 @@ export default function ChatMainView(): React.ReactElement {
                         onCondense={handleCondense}
                         isCondensing={isCondensing}
                         canCondense={phase === 'chatting'}
+                        // R62: compute condense-cap visibility at this level
+                        // (phase + enough messages + text overlay visible)
+                        // — passed through to ChatInputBar, where the capsule
+                        // now lives next to the mode-toggle button.
+                        showCondense={
+                          phase === 'chatting' &&
+                          messages.length >= 2 &&
+                          textDisplayMode !== 'hidden'
+                        }
                         messagesVisible={messagesVisible}
                         revealIds={revealIds}
                       />
