@@ -89,9 +89,24 @@ export default function ChatInputBar({
   const holdActiveRef = useRef(false);
   /** A swipe-up / pointer-leave cancels the in-flight recording. */
   const SWIPE_UP_THRESHOLD_PX = 70;
+  /**
+   * Round 60: guard against the message being sent TWICE — once by
+   * `stopVoice` (synchronous, using the latest voiceTranscript) and once
+   * again by `useSpeechRecognition.onend` (asynchronous, fires ~50-100ms
+   * after `recognition.stop()`). The first call sets the flag; the second
+   * call short-circuits. Flag auto-clears after 250ms so a fresh recording
+   * can finalize normally.
+   */
+  const finalizedRef = useRef(false);
 
   const finalizeRecording = useCallback(
     (finalText: string) => {
+      if (finalizedRef.current) return;
+      finalizedRef.current = true;
+      window.setTimeout(() => {
+        finalizedRef.current = false;
+      }, 250);
+
       if (silenceTimerRef.current) {
         window.clearTimeout(silenceTimerRef.current);
         silenceTimerRef.current = null;
@@ -148,8 +163,15 @@ export default function ChatInputBar({
 
   const stopVoice = useCallback(() => {
     if (!isVoiceRecording) return;
+    // Round 60: send the message IMMEDIATELY using the latest voiceTranscript
+    // (which includes any in-flight interim text). We don't wait for
+    // recognition.onend (which fires ~50-100ms later) — the user expects
+    // "松开立即发". The pending onend will still fire, but finalizedRef
+    // short-circuits its finalizeRecording() call so no duplicate is sent.
+    finalizeRecording(voiceTranscript);
+    // Tell the recognition engine to wind down. onend is a no-op for us now.
     stopRecording();
-  }, [isVoiceRecording, stopRecording]);
+  }, [isVoiceRecording, voiceTranscript, finalizeRecording, stopRecording]);
 
   const cancelVoice = useCallback(() => {
     if (silenceTimerRef.current) {

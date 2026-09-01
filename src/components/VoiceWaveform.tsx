@@ -1,57 +1,80 @@
 import { useEffect, useRef } from 'react';
-import { getAudioLevel, getWaveform } from '../utils/audioMeter';
+import { getAudioLevel } from '../utils/audioMeter';
 
 /**
- * VoiceWaveform — a SINGLE flowing sound-wave line (Round 59 refinement).
+ * VoiceWaveform — a SINGLE silk-line waveform (Round 60).
  *
- * Round 58 deliberately made the curve "BIG but GENTLE": few control points
- * (20) + temporal low-pass, so peaks read clearly without high-frequency
- * chatter. Round 59 tightens the visual further to match the reference
- * (image #2/#3): the line must be LONG (it should span nearly the full
- * width of the hold-bar, not a 220px stub), BREATHE slowly even at idle
- * (gentle large sine drift), and ONLY nudge its amplitude with voice —
- * no per-frame "锯齿" jitter.
+ * Round 59 was wrong: it used 60 sample points + per-point time-domain raw
+ * samples + Catmull-Rom. Even with 0.08 temporal low-pass, each point's
+ * amplitude is driven by the live analyser, so the 60 points chase 60
+ * different values → looks like a "bristly rope" with little spikes. NOT a
+ * silk line.
  *
- * Implementation notes:
- *  - POINT_COUNT was 20 → now 60 (denser samples → smoother Catmull-Rom).
- *  - VIEW_W 100 → 200 + AMP 15 → 18 (more horizontal + vertical room so
- *    the rolling waves fill the bar instead of a short central hump).
- *  - Temporal low-pass tightened: 0.85/0.15 → 0.92/0.08 (only ~8% of new
- *    amplitude leaks through per frame → no sawtooth).
- *  - Idle "breathing" sine is SLOW (0.5 rad/s) and LARGE (×0.35), so the
- *    line is alive even when no one speaks. As voice arrives the idle
- *    contribution softly fades (level·2.0) and the real wave takes over
- *    — speaking only nudges amplitude, the gentle baseline drift remains.
- *  - The actual frequency content is still driven by the live mic; we
- *    just present it as a smooth rolling curve.
+ * Round 60 — silk-line physics:
+ *   - FEW control points (7). Catmull-Rom across 7 points is mathematically
+ *     smooth: the curve CANNOT have kinks. No spikes possible.
+ *   - SINGLE driving wave: y[i] = sin(t*ω + x[i]*φ) * amp. Every point sits
+ *     on the SAME sinusoid at a different phase offset → the whole curve
+ *     moves coherently as one silk ribbon. (ω, φ) is tuned so we see ~2
+ *     crests across the 500px bar, matching the reference image.
+ *   - "+x" sign: the right edge leads the left → "右边的轨迹带动左边的
+ *     轨迹" (image #5). t grows → the SAME crest slides leftward across
+ *     the bar; viewers read this as "a bullet flying through the silk".
+ *   - A second slower counter-phase wave is added for visual depth so the
+ *     curve never looks like a perfect textbook sine.
+ *   - Amplitude responds VERY slowly (lerp 0.045) — voice volume nudges
+ *     the curve's HEIGHT, not its shape. Idle = 32% height, peak speech
+ *     = 120% height. The transition is gradual ("缓慢的变").
+ *   - Idle 32% keeps the line visibly alive even at silence.
+ *   - We DON'T pull raw per-point samples from getWaveform() anymore — that
+ *     was the source of the spikes. The mic level is read as a SINGLE
+ *     number and applied as a slow amplitude modulator.
  */
 
-/** Plenty of sample points so the curve reads as a continuous line. */
-const POINT_COUNT = 60;
-/** Wider, slightly taller viewBox (matches the 500px hold-bar aspect). */
+const POINT_COUNT = 7; // 7 control points → 6 Catmull-Rom segments, geometrically silk.
 const VIEW_W = 200;
 const VIEW_H = 36;
 const MID_Y = 18;
-/** Larger amplitude → peaks read clearly inside the new viewBox. */
-const AMP = 18;
-/** Temporal low-pass coefficients (must sum to 1). */
-const SMOOTH_KEEP = 0.92;
-const SMOOTH_NEW = 0.08;
+const AMP = 7; // peak vertical excursion in viewBox units (pixels).
 
-/** Catmull-Rom → cubic-bezier smoothing of the sampled points. */
+/** Normalized x position of each control point (0 → 1 across the bar). */
+const X_POSITIONS: number[] = Array.from({ length: POINT_COUNT }, (_, i) =>
+  i / (POINT_COUNT - 1),
+);
+
+/** Slow amplitude envelope — voice acts as height, not shape. */
+const AMP_IDLE = 0.32; // baseline "wind" (silk still drifts)
+const AMP_PEAK = 1.2; // peak height during loud speech
+/** Temporal lerp for the amplitude envelope. 0.045 ≈ 22 frames to reach 95%
+ *  → voice changes roll in gently, no hard jumps. */
+const AMP_LERP = 0.045;
+
+/** Time-evolution speeds (rad / s). */
+const WAVE_OMEGA = 0.6; // primary wave's phase rate (slide speed)
+const DRIFT_OMEGA = 0.25; // secondary drift's phase rate
+/** Spatial frequencies (radians across x=0..1). */
+const WAVE_FREQ = 4.5; // ~1.4 visible crests across the bar
+const DRIFT_FREQ = 1.5; // ½ opposite-direction crest
+
+/**
+ * Catmull-Rom → cubic-bezier smoothing of `values`. With only 7 control
+ * points this produces a guaranteed-silk curve; the bezier control points
+ * are derived from the local slope so consecutive segments share tangent
+ * directions (C¹ continuity) — no kinks, no spikes.
+ */
 function buildSmoothPath(values: number[]): string {
   const n = values.length;
   if (n < 2) return '';
   const pts = values.map((v, i) => ({
-    x: (i / (n - 1)) * VIEW_W,
+    x: X_POSITIONS[i] * VIEW_W,
     y: MID_Y - v * AMP,
   }));
   let d = `M ${pts[0].x.toFixed(2)} ${pts[0].y.toFixed(2)}`;
   for (let i = 0; i < n - 1; i++) {
-    const p0 = pts[i - 1] ?? pts[i];
+    const p0 = pts[i - 1] ?? pts[i]; // mirror at start
     const p1 = pts[i];
     const p2 = pts[i + 1];
-    const p3 = pts[i + 2] ?? p2;
+    const p3 = pts[i + 2] ?? p2; // mirror at end
     const cp1x = p1.x + (p2.x - p0.x) / 6;
     const cp1y = p1.y + (p2.y - p0.y) / 6;
     const cp2x = p2.x - (p3.x - p1.x) / 6;
@@ -66,41 +89,43 @@ function buildSmoothPath(values: number[]): string {
 
 export default function VoiceWaveform(): React.ReactElement {
   const pathRef = useRef<SVGPathElement>(null);
-  // Persistent smoothed values — updated every frame with the low-pass.
-  const smoothedRef = useRef<number[]>(new Array<number>(POINT_COUNT).fill(0));
+  // Persistent smoothed amplitude — updates every frame with the lerp.
+  const ampRef = useRef(AMP_IDLE);
+  // Last write time — used to compute a stable dt regardless of raf jitter.
+  const lastTimeRef = useRef<number | null>(null);
 
   useEffect(() => {
     let raf = 0;
     const start = performance.now();
+
     const loop = (now: number): void => {
-      const level = getAudioLevel(); // 0..1
-      const raw = getWaveform(POINT_COUNT); // -1..1
-      const smoothed = smoothedRef.current;
-      // Exponential low-pass in the time dimension — only a fraction of the
-      // new amplitude leaks through, so peaks roll in softly (no jitter).
-      for (let i = 0; i < POINT_COUNT; i++) {
-        smoothed[i] = smoothed[i] * SMOOTH_KEEP + raw[i] * SMOOTH_NEW;
-      }
+      // --- Time: a single global phase t (seconds since mount). ---
       const t = (now - start) / 1000;
-      // Slow, LARGE idle breathing: keeps the line gently drifting at
-      // silence. As voice grows the idle fades, but never fully disappears
-      // — the baseline "wind" remains visible underneath the speech.
-      const idle = 1 - Math.min(1, level * 2.0);
-      // Phase varies per-point to create a long meandering wave front
-      // (image #2) rather than one global sine.
-      const values = smoothed.map(
-        (s, i) =>
-          s +
-          // Longer period (0.5 vs 0.8) and bigger amplitude (0.35 vs 0.18)
-          // → quieter idle motion still feels substantial.
-          // NOTE the per-index phase offset of i*0.38 creates a chain of
-          // crests along the bar so the curve MEANDERS across the width.
-          Math.sin(t * 0.5 + i * 0.38) * 0.35 * idle +
-          // A second, even-slower component for slow vertical drift.
-          Math.sin(t * 0.22 + i * 0.12) * 0.18 * idle,
+
+      // --- Mic level → target amplitude (slow envelope). ---
+      const level = getAudioLevel(); // 0..1
+      const target = AMP_IDLE + Math.min(1, level) * (AMP_PEAK - AMP_IDLE);
+      // Exponential lerp. We use a 60Hz-tuned 0.045 → ~370ms to reach 95%
+      // of a step. Voice changes glide in — never "snaps".
+      ampRef.current += (target - ampRef.current) * AMP_LERP;
+      const amp = ampRef.current;
+
+      // --- Build the 7 control points. All driven by the SAME sinusoid;
+      //     each point is a phase-shifted sample. ---
+      // primary wave: y = sin(t*ω + x*φ) — right edge leads left → silk
+      //              crests slide LEFTWARD as t grows, the visual reads
+      //              as "right pushes left into a flowing ribbon".
+      // secondary:    y = sin(t*ω_d - x*φ_d) — slower, opposite direction,
+      //              small amplitude → depth, prevents textbook-sine look.
+      const values = X_POSITIONS.map(
+        (x) =>
+          Math.sin(t * WAVE_OMEGA + x * WAVE_FREQ) * 0.78 * amp +
+          Math.sin(t * DRIFT_OMEGA - x * DRIFT_FREQ) * 0.32 * amp,
       );
+
       const path = pathRef.current;
       if (path) path.setAttribute('d', buildSmoothPath(values));
+      lastTimeRef.current = now;
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);

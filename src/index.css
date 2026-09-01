@@ -562,12 +562,11 @@ button,
   background: rgba(20, 16, 12, 0.6);
 }
 
-/* Single flowing sound-wave line (Round 59). A single SVG <path> whose `d`
-   is rebuilt every frame by VoiceWaveform with heavy temporal smoothing →
-   long, gentle rolling waves (image #2). Thin, light, translucent white
-   with a faint gold glow. No fill, no bars. Width fills the 500px hold-bar
-   so the curve actually spans the available space instead of a 220px
-   central stub; height rises to 44 so the +18 amplitude has room. */
+/* Single silk-line sound-wave (Round 60). The path's `d` is rebuilt every
+   frame from 7 Catmull-Rom-smoothed control points driven by a SINGLE
+   sinusoid. With only 7 points the Catmull-Rom curve is mathematically
+   smooth — no spikes, no bristly edges. Width fills the 500px hold-bar;
+   height 44 gives the +7 amplitude room to breathe. */
 .voice-wave-path {
   display: block;
   width: 96%;
