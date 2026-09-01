@@ -155,12 +155,19 @@ function ThinkDots(): React.ReactElement {
 }
 
 /**
- * VoiceDraft — the LIVE, non-persisted transcript bubble shown while the user
- * is holding the voice button. Distinct (semi-transparent, with a sound-wave
- * icon) from a real user message so the user can tell the difference. It shows
- * the RECOGNIZED TEXT ITSELF (updated live as interim results arrive) — no
- * fixed "识别中…" label. Rendered only from store state — never added to the
- * message list — so it triggers no AI reply and is discarded on ESC.
+ * VoiceDraft — the LIVE transcript bubble shown while the user is holding the
+ * voice button. Round 61: visually identical to a real user message bubble
+ * (the "user-bubble" CSS class) — no more separate "声纹图标 + 半透明" look.
+ * Rationale: the user complained about "two bubbles stacking" when the
+ * previous version of VoiceDraft sat on top of the most-recent user message
+ * in the same chat stream. By making VoiceDraft *indistinguishable* from a
+ * normal user bubble, the message stream always shows ONE bubble while
+ * speaking; the bubble's text is updated live (interim transcript overwrites
+ * itself), and on release the freshly-recognized sentence is `addMessage()`'d
+ * into the real stream — visually a seamless transition.
+ *
+ * The "识别中…" / sound-wave icon is gone. A tiny blinking caret
+ * (.voice-cursor) still indicates "still listening" without changing shape.
  */
 function VoiceDraft({
   text,
@@ -170,18 +177,9 @@ function VoiceDraft({
   recording: boolean;
 }): React.ReactElement {
   return (
-    <div className="voice-draft-bubble">
-      <span className="voice-draft-icon" aria-hidden="true">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}>
-          <path strokeLinecap="round" d="M4 10v4M8 6v12M12 3v18M16 6v12M20 10v4" />
-        </svg>
-      </span>
-      <div className="voice-draft-body">
-        <span className="voice-draft-text">
-          {text || ''}
-          {recording && <span className="voice-cursor" />}
-        </span>
-      </div>
+    <div className="user-bubble">
+      {text || ''}
+      {recording && <span className="voice-cursor" />}
     </div>
   );
 }
@@ -341,7 +339,24 @@ export default function ChatPanel({
                 slight upward rise + 60ms stagger; everything else (normal
                 entry, or messages sent after the reveal) appears instantly. */}
             {textDisplayMode === 'full' &&
-              historyMessages.map((msg) => {
+              historyMessages.map((msg, idx) => {
+                // Round 61: while the user is speaking, hide the most-recent
+                // user message in the stream — the VoiceDraft bubble rendered
+                // RIGHT AFTER it occupies the same right-side slot with the
+                // visually-identical `user-bubble` style. Skipping the last
+                // user row avoids "two stacked bubbles with the same look"
+                // during live transcription. Assistant messages are kept
+                // (they sit on the left and don't collide with the right-side
+                // draft). On release, `addMessage()` appends a fresh user
+                // message; that one renders normally.
+                const isLast = idx === historyMessages.length - 1;
+                if (
+                  isLast &&
+                  msg.role === 'user' &&
+                  (isVoiceRecording || voiceTranscript)
+                ) {
+                  return null;
+                }
                 const typewriter = shouldTypewrite(msg.id, msg.role, msg.typed);
                 const isReveal = revealIds.includes(msg.id);
                 const revealIndex = isReveal ? revealIds.indexOf(msg.id) : 0;

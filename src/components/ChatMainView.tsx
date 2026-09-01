@@ -227,34 +227,34 @@ export default function ChatMainView(): React.ReactElement {
     };
   }, [currentImageDataUrl]);
 
-  // Round 59: voice-driven particle BURST — subtle radial scatter, not a
-  // visible zoom. Previous rounds used BURST_SCALE = 0.20, which scaled the
-  // whole picture by up to 1.16× and clearly read as "放大缩小". The user
-  // wants the effect of an outer particle being LIGHTLY TAP — outer points
-  // drift outward by a few pixels while the center holds steady — and with
-  // ZERO perceptible delay.
-  //
-  // Tuned for that feel:
-  //   - BURST_SCALE 0.07 → max scale ≈ 1.05×, essentially invisible as a
-  //     scale, but radial offset = (scale-1)·dist still produces a few
-  //     visible pixels of outward drift at the edge.
-  //   - HOLD_BURST 0.16 (was 0.30) → while holding silent, the wrapper
-  //     barely nudges (≈1.011×) — a hint of "primed" energy, not a breath.
-  //   - SPEAK_FLOOR 0.22 + SPEAK_RANGE 0.48 → speaking range maps the mic
-  //     to 0.22..0.70 burst (small motion; never amplifies the picture).
-  //   - LERP_K 0.34 (was 0.10) → ~99% catch-up in ~12 frames (~200 ms) so
-  //     the first syllable already starts nudging the particles; silence
-  //     returns to baseline on the same curve (no rebound lag).
+  // Round 61: voice-driven particle BURST — "edge particles lightly tap",
+// not a whole-image zoom. The user explicitly asked: "一说话只需要边缘
+// 粒子灵动一些就好啦" — meaning the radial diffusion should be barely
+// perceptible as a scale, with the visible action confined to the outer
+// particles gently drifting outward by ~2-3 pixels.
+//
+// Tuning (R59 → R61):
+//   - BURST_SCALE 0.07 → 0.022 → max scale ≈ 1.022×, visually a NON-event
+//     for the picture as a whole. Edge-particle radial offset =
+//     (scale-1)·dist_from_center ≈ 0.022·edgeDist ≈ 2-3 px for a typical
+//     canvas — exactly the "轻触散开" feel requested.
+//   - HOLD_BURST 0.16 → 0.06 → holding silent is virtually motionless
+//     (≈1.0013×). No more "primed breath" visible at idle.
+//   - SPEAK_FLOOR 0.22 → 0.18, SPEAK_RANGE 0.48 → 0.70 → speaking range
+//     0.18..0.88 — burstAmount spans a wider range so the visual
+//     response to voice is unmistakable even with the tiny scale.
+//   - LERP_K 0.34 → 0.48 → ~99% catch-up in ~8 frames (~130 ms). Voice
+//     onset hits the particles almost instantly, no perceptible lag.
   useEffect(() => {
     if (!particleData || phase === 'idle') return;
     let raf = 0;
     let curBurst = 0; // current burstAmount (lerped)
     const SILENCE_LEVEL = 0.045; // below this the mic is "silent"
-    const HOLD_BURST = 0.16; // holding silent → tiny outer expansion
-    const SPEAK_FLOOR = 0.22; // speaking floor
-    const SPEAK_RANGE = 0.48; // speaking → up to ~0.70
-    const BURST_SCALE = 0.07; // scale = 1 + burst · BURST_SCALE
-    const LERP_K = 0.34; // smoothness vs responsiveness (higher = snappier)
+    const HOLD_BURST = 0.06; // holding silent → essentially no expansion
+    const SPEAK_FLOOR = 0.18; // speaking floor
+    const SPEAK_RANGE = 0.70; // speaking → up to ~0.88
+    const BURST_SCALE = 0.022; // scale = 1 + burst · BURST_SCALE (≈1.022 max)
+    const LERP_K = 0.48; // smoothness vs responsiveness (higher = snappier)
     const lerp = (a: number, b: number, t: number): number => a + (b - a) * t;
     const loop = (): void => {
       const level = getAudioLevel(); // 0..1
@@ -276,6 +276,10 @@ export default function ChatMainView(): React.ReactElement {
       if (el) {
         // Pure scale-from-center → radial diffusion. No translate/rotate, so
         // the whole picture never "shakes" (Round 56 bug fixed in R57).
+        // With BURST_SCALE = 0.022 the picture's overall size is visually
+        // unchanged; the only motion the eye catches is the outer particles
+        // drifting outward by a couple of pixels — exactly the "轻触" the
+        // user asked for.
         el.style.transform = `scale(${(1 + curBurst * BURST_SCALE).toFixed(4)})`;
       }
       raf = requestAnimationFrame(loop);

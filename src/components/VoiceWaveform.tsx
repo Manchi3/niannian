@@ -22,13 +22,21 @@ import { getAudioLevel } from '../utils/audioMeter';
  *     the bar; viewers read this as "a bullet flying through the silk".
  *   - A second slower counter-phase wave is added for visual depth so the
  *     curve never looks like a perfect textbook sine.
- *   - Amplitude responds VERY slowly (lerp 0.045) — voice volume nudges
- *     the curve's HEIGHT, not its shape. Idle = 32% height, peak speech
- *     = 120% height. The transition is gradual ("缓慢的变").
- *   - Idle 32% keeps the line visibly alive even at silence.
+ *   - Amplitude responds to voice (lerp 0.10) — voice volume nudges the
+ *     curve's HEIGHT, not its shape. Idle = 28% height, peak speech = 200%
+ *     height. Idle 28% keeps the line visibly alive even at silence.
  *   - We DON'T pull raw per-point samples from getWaveform() anymore — that
  *     was the source of the spikes. The mic level is read as a SINGLE
  *     number and applied as a slow amplitude modulator.
+ *
+ * Round 61 — fix the "dead-looking" wave:
+ *   - AMP_PEAK 1.2 → 2.0, AMP_IDLE 0.32 → 0.28, AMP_LERP 0.045 → 0.10:
+ *     speaking now makes the curve visibly rise and fall. R60 was *too*
+ *     tame — the silk was perfect, but the user couldn't tell voice from
+ *     silence without staring.
+ *   - DRIFT_OMEGA 0.25 → 0.32, DRIFT_FREQ 1.5 → 2.2, drift weight 0.32 →
+ *     0.48: secondary wave is faster and has more crests, so the curve
+ *     has clear sub-motion visible to the eye.
  */
 
 const POINT_COUNT = 7; // 7 control points → 6 Catmull-Rom segments, geometrically silk.
@@ -43,18 +51,21 @@ const X_POSITIONS: number[] = Array.from({ length: POINT_COUNT }, (_, i) =>
 );
 
 /** Slow amplitude envelope — voice acts as height, not shape. */
-const AMP_IDLE = 0.32; // baseline "wind" (silk still drifts)
-const AMP_PEAK = 1.2; // peak height during loud speech
-/** Temporal lerp for the amplitude envelope. 0.045 ≈ 22 frames to reach 95%
- *  → voice changes roll in gently, no hard jumps. */
-const AMP_LERP = 0.045;
+const AMP_IDLE = 0.28; // baseline "wind" (silk still drifts)
+const AMP_PEAK = 2.0; // peak height during loud speech — R61 bumped up: R60
+                       // looked "dead" because voice amplitude barely
+                       // shifted the curve visually.
+/** Temporal lerp for the amplitude envelope. 0.10 ≈ 5 frames to reach 95%
+ *  at 60Hz → voice rises and falls visibly with the sound, no more dead-feeling
+ *  drift. Still smooth (no sawtooth) thanks to the single-sinusoid shape. */
+const AMP_LERP = 0.10;
 
 /** Time-evolution speeds (rad / s). */
 const WAVE_OMEGA = 0.6; // primary wave's phase rate (slide speed)
-const DRIFT_OMEGA = 0.25; // secondary drift's phase rate
+const DRIFT_OMEGA = 0.32; // secondary drift's phase rate (R61: faster)
 /** Spatial frequencies (radians across x=0..1). */
 const WAVE_FREQ = 4.5; // ~1.4 visible crests across the bar
-const DRIFT_FREQ = 1.5; // ½ opposite-direction crest
+const DRIFT_FREQ = 2.2; // R61: higher → more "crests" → more depth
 
 /**
  * Catmull-Rom → cubic-bezier smoothing of `values`. With only 7 control
@@ -105,8 +116,9 @@ export default function VoiceWaveform(): React.ReactElement {
       // --- Mic level → target amplitude (slow envelope). ---
       const level = getAudioLevel(); // 0..1
       const target = AMP_IDLE + Math.min(1, level) * (AMP_PEAK - AMP_IDLE);
-      // Exponential lerp. We use a 60Hz-tuned 0.045 → ~370ms to reach 95%
-      // of a step. Voice changes glide in — never "snaps".
+      // Exponential lerp. 0.10 → ~5 frames to reach 95% at 60Hz. Voice
+      // rises and falls VISIBLY with the sound; the curve still doesn't
+      // snap because the underlying shape is one continuous sinusoid.
       ampRef.current += (target - ampRef.current) * AMP_LERP;
       const amp = ampRef.current;
 
@@ -115,12 +127,15 @@ export default function VoiceWaveform(): React.ReactElement {
       // primary wave: y = sin(t*ω + x*φ) — right edge leads left → silk
       //              crests slide LEFTWARD as t grows, the visual reads
       //              as "right pushes left into a flowing ribbon".
-      // secondary:    y = sin(t*ω_d - x*φ_d) — slower, opposite direction,
-      //              small amplitude → depth, prevents textbook-sine look.
+      // secondary:    y = sin(t*ω_d - x*φ_d) — faster + larger amplitude
+      //              (R61) so the curve has visible secondary motion
+      //              overlapping the primary; prevents a "perfect textbook
+      //              sine" look and gives the wave life when the user
+      //              actually speaks.
       const values = X_POSITIONS.map(
         (x) =>
-          Math.sin(t * WAVE_OMEGA + x * WAVE_FREQ) * 0.78 * amp +
-          Math.sin(t * DRIFT_OMEGA - x * DRIFT_FREQ) * 0.32 * amp,
+          Math.sin(t * WAVE_OMEGA + x * WAVE_FREQ) * 0.72 * amp +
+          Math.sin(t * DRIFT_OMEGA - x * DRIFT_FREQ) * 0.48 * amp,
       );
 
       const path = pathRef.current;

@@ -601,50 +601,13 @@ button,
   }
 }
 
-/* Live interim transcript bubble (Round 56 — ③). Distinct from a real user
-   message: semi-transparent, with a sound-wave icon. It shows the recognized
-   text itself (updated live) — Round 58 removed the fixed "识别中…" label.
-   Rendered only from store state and never persisted / never triggers a reply. */
-.voice-draft-bubble {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  max-width: 100%;
-  padding: 10px 14px;
-  border-radius: 18px;
-  background: rgba(15, 12, 9, 0.5);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-}
-
-.voice-draft-icon {
-  flex: none;
-  width: 18px;
-  height: 18px;
-  margin-top: 2px;
-  color: rgba(212, 168, 83, 0.9);
-  animation: voice-dot-pulse 1.2s ease-in-out infinite;
-}
-
-.voice-draft-icon svg {
-  width: 100%;
-  height: 100%;
-}
-
-.voice-draft-body {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-
-.voice-draft-text {
-  font-size: 14px;
-  line-height: 1.5;
-  color: rgba(232, 221, 208, 0.92);
-  word-break: break-word;
-}
+/* Live interim transcript bubble (Round 61). VoiceDraft now reuses the
+   exact same `user-bubble` style as the rest of the chat, so visually there
+   is only ever one bubble on screen while the user is speaking — the draft
+   *replaces* the last user message in the stream (skipped by ChatPanel when
+   voiceTranscript is non-empty). A tiny blinking caret (`.voice-cursor`)
+   remains to signal "still listening", but the separate sound-wave icon,
+   semi-transparent background, and bespoke `.voice-draft-*` rules are gone. */
 
 /* Outer wrapper that receives the voice-driven radial BURST transform
    (Round 57). No CSS transition — the scale is updated every frame by rAF,
