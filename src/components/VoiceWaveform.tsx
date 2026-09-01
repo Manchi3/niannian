@@ -2,33 +2,41 @@ import { useEffect, useRef } from 'react';
 import { getAudioLevel, getWaveform } from '../utils/audioMeter';
 
 /**
- * VoiceWaveform — a SINGLE flowing sound-wave line (图五), NOT vertical bars.
+ * VoiceWaveform — a SINGLE flowing sound-wave line (Round 59 refinement).
  *
- * One SVG <path> whose `d` is rebuilt every frame. Round 58: the curve is
- * deliberately BIG but GENTLE — a few (20) control points, each smoothed in
- * the TIME dimension with an exponential low-pass (smoothed = 0.85·prev +
- * 0.15·raw), then joined with Catmull-Rom → cubic-bezier so it flows like
- * silk. Peaks are tall (amplitude ×1.5+) but the heavy smoothing kills the
- * high-frequency jitter, so it reads as slow rolling waves, never a sawtooth.
+ * Round 58 deliberately made the curve "BIG but GENTLE": few control points
+ * (20) + temporal low-pass, so peaks read clearly without high-frequency
+ * chatter. Round 59 tightens the visual further to match the reference
+ * (image #2/#3): the line must be LONG (it should span nearly the full
+ * width of the hold-bar, not a 220px stub), BREATHE slowly even at idle
+ * (gentle large sine drift), and ONLY nudge its amplitude with voice —
+ * no per-frame "锯齿" jitter.
  *
- * At silence the mic data is flat, so a slow LARGE sine keeps the line alive
- * and gently breathing. Thin, light, translucent white with a faint gold glow
- * — no fill, no bars. Motion is imperative (rAF + refs); the parent input bar
- * never re-renders per frame. The mic stream itself is opened/released by the
- * audioMeter module (one getUserMedia, also shared with the particle burst).
+ * Implementation notes:
+ *  - POINT_COUNT was 20 → now 60 (denser samples → smoother Catmull-Rom).
+ *  - VIEW_W 100 → 200 + AMP 15 → 18 (more horizontal + vertical room so
+ *    the rolling waves fill the bar instead of a short central hump).
+ *  - Temporal low-pass tightened: 0.85/0.15 → 0.92/0.08 (only ~8% of new
+ *    amplitude leaks through per frame → no sawtooth).
+ *  - Idle "breathing" sine is SLOW (0.5 rad/s) and LARGE (×0.35), so the
+ *    line is alive even when no one speaks. As voice arrives the idle
+ *    contribution softly fades (level·2.0) and the real wave takes over
+ *    — speaking only nudges amplitude, the gentle baseline drift remains.
+ *  - The actual frequency content is still driven by the live mic; we
+ *    just present it as a smooth rolling curve.
  */
 
-/** Fewer control points → coarser but smoother, more "rolling" curve. */
-const POINT_COUNT = 20;
-const VIEW_W = 100;
-const VIEW_H = 32;
-const MID_Y = 16;
-/** Larger amplitude so peaks read clearly, but the per-point low-pass keeps
- *  the transition gentle (no high-frequency chatter). */
-const AMP = 15;
+/** Plenty of sample points so the curve reads as a continuous line. */
+const POINT_COUNT = 60;
+/** Wider, slightly taller viewBox (matches the 500px hold-bar aspect). */
+const VIEW_W = 200;
+const VIEW_H = 36;
+const MID_Y = 18;
+/** Larger amplitude → peaks read clearly inside the new viewBox. */
+const AMP = 18;
 /** Temporal low-pass coefficients (must sum to 1). */
-const SMOOTH_KEEP = 0.85;
-const SMOOTH_NEW = 0.15;
+const SMOOTH_KEEP = 0.92;
+const SMOOTH_NEW = 0.08;
 
 /** Catmull-Rom → cubic-bezier smoothing of the sampled points. */
 function buildSmoothPath(values: number[]): string {
@@ -68,16 +76,28 @@ export default function VoiceWaveform(): React.ReactElement {
       const level = getAudioLevel(); // 0..1
       const raw = getWaveform(POINT_COUNT); // -1..1
       const smoothed = smoothedRef.current;
-      // Exponential low-pass in the time dimension → kills jitter.
+      // Exponential low-pass in the time dimension — only a fraction of the
+      // new amplitude leaks through, so peaks roll in softly (no jitter).
       for (let i = 0; i < POINT_COUNT; i++) {
         smoothed[i] = smoothed[i] * SMOOTH_KEEP + raw[i] * SMOOTH_NEW;
       }
       const t = (now - start) / 1000;
-      // Slow, LARGE idle breathing so the line is alive at silence; it fades
-      // out as the real voice grows. Low frequency → no chatter.
-      const idle = 1 - Math.min(1, level * 2.5);
+      // Slow, LARGE idle breathing: keeps the line gently drifting at
+      // silence. As voice grows the idle fades, but never fully disappears
+      // — the baseline "wind" remains visible underneath the speech.
+      const idle = 1 - Math.min(1, level * 2.0);
+      // Phase varies per-point to create a long meandering wave front
+      // (image #2) rather than one global sine.
       const values = smoothed.map(
-        (s, i) => s + Math.sin(t * 0.8 + i * 0.45) * 0.18 * idle,
+        (s, i) =>
+          s +
+          // Longer period (0.5 vs 0.8) and bigger amplitude (0.35 vs 0.18)
+          // → quieter idle motion still feels substantial.
+          // NOTE the per-index phase offset of i*0.38 creates a chain of
+          // crests along the bar so the curve MEANDERS across the width.
+          Math.sin(t * 0.5 + i * 0.38) * 0.35 * idle +
+          // A second, even-slower component for slow vertical drift.
+          Math.sin(t * 0.22 + i * 0.12) * 0.18 * idle,
       );
       const path = pathRef.current;
       if (path) path.setAttribute('d', buildSmoothPath(values));

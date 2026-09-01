@@ -22,6 +22,12 @@ interface MinimalSpeechRecognition {
 }
 
 interface MinimalSpeechRecognitionEvent {
+  /** Index of the first NEW result in `results` — older entries have already
+   *  been delivered in prior `onresult` callbacks. Honoring this kills the
+   *  "one sentence recognized twice" bug some Chrome builds produce (they
+   *  repeatedly re-emit the same `isFinal` result inside a continuous
+   *  session, causing string concatenation to duplicate text). */
+  resultIndex: number;
   results: {
     length: number;
     [index: number]: {
@@ -92,7 +98,10 @@ export function useSpeechRecognition({
 
     recognition.onresult = (event: MinimalSpeechRecognitionEvent) => {
       let interim = '';
-      for (let i = 0; i < event.results.length; i++) {
+      // Iterate ONLY the freshly delivered slice. Older results were already
+      // counted in `finalRef.current` — re-counting them doubled the text in
+      // some Chrome continuous-mode builds.
+      for (let i = event.resultIndex; i < event.results.length; i++) {
         const result = event.results[i];
         if (result.isFinal) {
           finalRef.current += result[0].transcript;

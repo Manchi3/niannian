@@ -227,45 +227,55 @@ export default function ChatMainView(): React.ReactElement {
     };
   }, [currentImageDataUrl]);
 
-  // Round 57: voice-driven radial BURST. A single rAF loop reads the shared
-  // mic level (audioMeter) + recording state and maps them to ONE controllable
-  // parameter — `burstAmount` (0..1) — which is applied as a scale transform
-  // on the outer .particle-voice-sway wrapper (centered). Scaling from the
-  // center is mathematically a radial offset: every point's displacement is
-  // proportional to its distance from center, so outer particles "炸开" and
-  // the center stays still. Smoothing via lerp — never a hard snap.
-  // State machine (all lerped):
-  //   - silence / not recording: burstAmount = 0  (scale 1 — only the engine's
-  //     own gentle idle breathing remains; no added motion, no shake)
-  //   - holding but silent:       burstAmount = 0.3 (mild outer expansion)
-  //   - speaking:                 burstAmount = 0.3..0.8 from the live RMS level
-  // The particle ENGINE itself is never touched (red line honored).
+  // Round 59: voice-driven particle BURST — subtle radial scatter, not a
+  // visible zoom. Previous rounds used BURST_SCALE = 0.20, which scaled the
+  // whole picture by up to 1.16× and clearly read as "放大缩小". The user
+  // wants the effect of an outer particle being LIGHTLY TAP — outer points
+  // drift outward by a few pixels while the center holds steady — and with
+  // ZERO perceptible delay.
+  //
+  // Tuned for that feel:
+  //   - BURST_SCALE 0.07 → max scale ≈ 1.05×, essentially invisible as a
+  //     scale, but radial offset = (scale-1)·dist still produces a few
+  //     visible pixels of outward drift at the edge.
+  //   - HOLD_BURST 0.16 (was 0.30) → while holding silent, the wrapper
+  //     barely nudges (≈1.011×) — a hint of "primed" energy, not a breath.
+  //   - SPEAK_FLOOR 0.22 + SPEAK_RANGE 0.48 → speaking range maps the mic
+  //     to 0.22..0.70 burst (small motion; never amplifies the picture).
+  //   - LERP_K 0.34 (was 0.10) → ~99% catch-up in ~12 frames (~200 ms) so
+  //     the first syllable already starts nudging the particles; silence
+  //     returns to baseline on the same curve (no rebound lag).
   useEffect(() => {
     if (!particleData || phase === 'idle') return;
     let raf = 0;
     let curBurst = 0; // current burstAmount (lerped)
-    const SILENCE_LEVEL = 0.04; // below this the mic is "silent"
-    const HOLD_BURST = 0.3; // holding silent → mild outer expansion
-    const SPEAK_FLOOR = 0.3; // speaking floor
-    const SPEAK_RANGE = 0.5; // speaking → up to 0.8
-    const BURST_SCALE = 0.2; // scale = 1 + burst * BURST_SCALE
+    const SILENCE_LEVEL = 0.045; // below this the mic is "silent"
+    const HOLD_BURST = 0.16; // holding silent → tiny outer expansion
+    const SPEAK_FLOOR = 0.22; // speaking floor
+    const SPEAK_RANGE = 0.48; // speaking → up to ~0.70
+    const BURST_SCALE = 0.07; // scale = 1 + burst · BURST_SCALE
+    const LERP_K = 0.34; // smoothness vs responsiveness (higher = snappier)
     const lerp = (a: number, b: number, t: number): number => a + (b - a) * t;
     const loop = (): void => {
       const level = getAudioLevel(); // 0..1
       const recording = recordingRef.current;
       let target = 0;
       if (recording) {
-        // Outer particles expand while "listening"; expand more with volume.
+        // Outer particles expand while "listening"; expand a bit more with
+        // volume — but never enough to scale the image noticeably.
         target =
           level > SILENCE_LEVEL
             ? SPEAK_FLOOR + Math.min(1, level / 0.6) * SPEAK_RANGE
             : HOLD_BURST;
       }
-      curBurst = lerp(curBurst, target, 0.1);
+      curBurst = lerp(curBurst, target, LERP_K);
+      // Snap to 0 once we're vanishingly small — avoids "永远在 lerp 接近 0"
+      // floating-point drift.
+      if (!recording && curBurst < 1e-4) curBurst = 0;
       const el = voiceSwayRef.current;
       if (el) {
         // Pure scale-from-center → radial diffusion. No translate/rotate, so
-        // the whole picture never shakes (fixes Round 56's "抖得严重").
+        // the whole picture never "shakes" (Round 56 bug fixed in R57).
         el.style.transform = `scale(${(1 + curBurst * BURST_SCALE).toFixed(4)})`;
       }
       raf = requestAnimationFrame(loop);

@@ -562,26 +562,28 @@ button,
   background: rgba(20, 16, 12, 0.6);
 }
 
-/* Single flowing sound-wave line (Round 58 — 图五). A single SVG <path>
-   whose `d` is rebuilt every frame by VoiceWaveform with heavy temporal
-   smoothing → big but gentle rolling waves. Thin, light, translucent white
-   with a faint gold glow. No fill, no bars. Height matches the 32-tall
-   viewBox so the amplitude maps 1:1. */
+/* Single flowing sound-wave line (Round 59). A single SVG <path> whose `d`
+   is rebuilt every frame by VoiceWaveform with heavy temporal smoothing →
+   long, gentle rolling waves (image #2). Thin, light, translucent white
+   with a faint gold glow. No fill, no bars. Width fills the 500px hold-bar
+   so the curve actually spans the available space instead of a 220px
+   central stub; height rises to 44 so the +18 amplitude has room. */
 .voice-wave-path {
   display: block;
-  width: min(220px, 70%);
-  height: 28px;
+  width: 96%;
+  max-width: 488px;
+  height: 44px;
   overflow: visible;
 }
 
 .voice-wave-path path {
   fill: none;
-  stroke: rgba(232, 221, 208, 0.85);
-  stroke-width: 1.5;
+  stroke: rgba(232, 221, 208, 0.82);
+  stroke-width: 1.4;
   stroke-linecap: round;
   stroke-linejoin: round;
   vector-effect: non-scaling-stroke;
-  filter: drop-shadow(0 0 3px rgba(212, 168, 83, 0.45));
+  filter: drop-shadow(0 0 4px rgba(212, 168, 83, 0.4));
 }
 
 /* Particle background — Round 57: the voice effect is a radial BURST applied
